@@ -1,0 +1,1 @@
+# Extensao_ChromeOkami-Edition
