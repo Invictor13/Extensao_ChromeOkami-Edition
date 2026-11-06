@@ -1,0 +1,89 @@
+:root {
+  --bg-color: #0b0c0e;
+  --text-main: #f3f4f6;
+  --text-dim: #9ca3af;
+  --accent-color: #3b82f6;
+  --card-bg: rgba(22, 23, 27, 0.7);
+  --border-color: rgba(255, 255, 255, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-image:
+    radial-gradient(circle at 50% 30%, rgba(30, 41, 59, 0.4) 0%, transparent 60%),
+    radial-gradient(circle at 80% 80%, rgba(15, 23, 42, 0.6) 0%, transparent 50%);
+}
+
+.okami-newtab-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  text-align: center;
+  animation: fadeIn 0.8s ease-out;
+}
+
+.okami-title {
+  font-size: 2.75rem;
+  font-weight: 700;
+  letter-spacing: 0.25rem;
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.okami-subtitle {
+  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-dim);
+  letter-spacing: 0.05rem;
+}
+
+.okami-status-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  padding: 0.6rem 1.2rem;
+  border-radius: 9999px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  background-color: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #10b981;
+}
+
+.status-text {
+  font-size: 0.85rem;
+  color: #e5e7eb;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
