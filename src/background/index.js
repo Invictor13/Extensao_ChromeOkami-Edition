@@ -1,5 +1,6 @@
 import { EXTENSION_NAME, EXTENSION_VERSION } from '../shared/constants/index.js';
 import { logInfo, logError } from '../shared/utils/logger.js';
+import { setupImmersiveModeManager } from './managers/ImmersiveModeManager.js';
 
 /**
  * Ponto de entrada do Background Service Worker do Okami HUD.
@@ -24,6 +25,9 @@ export function initializeBackground() {
           logError('Falha no listener onStartup:', err);
         }
       });
+
+      // Configura o gerenciador do modo imersivo
+      setupImmersiveModeManager();
     }
 
     logInfo(`${EXTENSION_NAME} Service Worker registrado.`);

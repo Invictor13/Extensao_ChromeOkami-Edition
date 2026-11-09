@@ -3,6 +3,9 @@
   "name": "Okami HUD",
   "version": "0.1.0",
   "description": "Interface minimalista, contextual e acionada por bordas para Google Chrome.",
+  "permissions": [
+    "storage"
+  ],
   "background": {
     "service_worker": "src/background/index.js",
     "type": "module"
@@ -22,5 +25,14 @@
   },
   "action": {
     "default_title": "Okami HUD"
+  },
+  "commands": {
+    "toggle-immersive-mode": {
+      "suggested_key": {
+        "default": "Alt+Shift+F",
+        "mac": "Alt+Shift+F"
+      },
+      "description": "Alternar modo imersivo"
+    }
   }
 }

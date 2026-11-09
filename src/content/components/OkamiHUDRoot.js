@@ -6,12 +6,14 @@
 (function (globalScope) {
   const OKAMI_HUD_CUSTOM_ELEMENT = 'okami-hud-root';
   const OKAMI_HUD_INDICATOR_ID = 'okami-hud-init-indicator';
+  const OKAMI_HUD_EXIT_BUTTON_ID = 'okami-hud-exit-btn';
 
   class OkamiHUDRoot extends HTMLElement {
     constructor() {
       super();
       // Shadow DOM fechado conforme decisão de arquitetura
       this._shadowRoot = this.attachShadow({ mode: 'closed' });
+      this._isImmersive = false;
     }
 
     connectedCallback() {
@@ -19,21 +21,86 @@
     }
 
     render() {
-      renderOkamiHUDInShadow(this._shadowRoot);
+      renderOkamiHUDInShadow(this._shadowRoot, { isImmersive: this._isImmersive });
+    }
+
+    setImmersiveState(isImmersive) {
+      this._isImmersive = Boolean(isImmersive);
+      updateExitButtonInShadow(this._shadowRoot, this._isImmersive);
     }
 
     /**
-     * Método auxiliar para testes unitários ou inspeção interna.
+     * Métodos auxiliares para testes unitários ou inspeção interna.
      */
     hasRenderedBadge() {
-      return this._shadowRoot.getElementById(OKAMI_HUD_INDICATOR_ID) !== null;
+      return (
+        (typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_INDICATOR_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_INDICATOR_ID}`)) !== null
+      );
+    }
+
+    hasExitButton() {
+      return (
+        (typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_EXIT_BUTTON_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_EXIT_BUTTON_ID}`)) !== null
+      );
     }
   }
 
   /**
-   * Renderiza os estilos isolados e o badge inicial dentro do Shadow DOM fechado fornecido.
+   * Adiciona ou remove o botão de saída do modo imersivo dentro do Shadow Root.
    */
-  function renderOkamiHUDInShadow(shadowRoot) {
+  function updateExitButtonInShadow(shadowRoot, isImmersive) {
+    if (!shadowRoot) return;
+
+    let exitBtn =
+      typeof shadowRoot.getElementById === 'function'
+        ? shadowRoot.getElementById(OKAMI_HUD_EXIT_BUTTON_ID)
+        : shadowRoot.querySelector?.(`#${OKAMI_HUD_EXIT_BUTTON_ID}`);
+
+    if (isImmersive) {
+      if (!exitBtn) {
+        exitBtn = document.createElement('button');
+        exitBtn.id = OKAMI_HUD_EXIT_BUTTON_ID;
+        exitBtn.className = 'okami-exit-btn';
+        exitBtn.type = 'button';
+        exitBtn.title = 'Sair do Modo Imersivo';
+        exitBtn.setAttribute('aria-label', 'Sair do Modo Imersivo');
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'okami-exit-icon';
+        iconSpan.textContent = '✕';
+
+        const textSpan = document.createElement('span');
+        textSpan.className = 'okami-exit-text';
+        textSpan.textContent = 'Sair do Modo Imersivo';
+
+        exitBtn.appendChild(iconSpan);
+        exitBtn.appendChild(textSpan);
+
+        exitBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof globalScope.requestExitImmersiveMode === 'function') {
+            globalScope.requestExitImmersiveMode();
+          }
+        });
+
+        shadowRoot.appendChild(exitBtn);
+      }
+    } else {
+      if (exitBtn && exitBtn.parentNode) {
+        exitBtn.parentNode.removeChild(exitBtn);
+      }
+    }
+  }
+
+  /**
+   * Renderiza os estilos isolados, o badge inicial e opcionalmente o botão de saída dentro do Shadow DOM fechado fornecido.
+   */
+  function renderOkamiHUDInShadow(shadowRoot, options = {}) {
     // Limpeza segura sem innerHTML com dados de terceiros
     while (shadowRoot.firstChild) {
       shadowRoot.removeChild(shadowRoot.firstChild);
@@ -72,6 +139,49 @@
       transition: opacity 0.5s ease-out;
       user-select: none;
     }
+
+    .okami-exit-btn {
+      position: absolute;
+      top: 14px;
+      right: 18px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      background: rgba(22, 22, 28, 0.88);
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      cursor: pointer;
+      pointer-events: auto; /* Permite clique sem bloquear o restante da tela */
+      user-select: none;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .okami-exit-btn:hover {
+      background: rgba(40, 40, 52, 0.95);
+      border-color: rgba(255, 255, 255, 0.35);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    }
+
+    .okami-exit-btn:active {
+      transform: translateY(0);
+      background: rgba(20, 20, 26, 0.95);
+    }
+
+    .okami-exit-icon {
+      font-size: 13px;
+      line-height: 1;
+    }
+
+    .okami-exit-text {
+      line-height: 1;
+    }
   `;
 
     const badge = document.createElement('div');
@@ -81,6 +191,10 @@
 
     shadowRoot.appendChild(style);
     shadowRoot.appendChild(badge);
+
+    if (options.isImmersive) {
+      updateExitButtonInShadow(shadowRoot, true);
+    }
 
     // O indicador mínimo desaparece suavemente após 3.5 segundos para não poluir a interface
     setTimeout(() => {
@@ -115,7 +229,9 @@
   // Exportação no escopo compartilhado (compatível com Content Scripts do Chrome e testes)
   globalScope.OkamiHUDRoot = OkamiHUDRoot;
   globalScope.renderOkamiHUDInShadow = renderOkamiHUDInShadow;
+  globalScope.updateExitButtonInShadow = updateExitButtonInShadow;
   globalScope.registerOkamiHUDRoot = registerOkamiHUDRoot;
   globalScope.OKAMI_HUD_CUSTOM_ELEMENT = OKAMI_HUD_CUSTOM_ELEMENT;
   globalScope.OKAMI_HUD_INDICATOR_ID = OKAMI_HUD_INDICATOR_ID;
+  globalScope.OKAMI_HUD_EXIT_BUTTON_ID = OKAMI_HUD_EXIT_BUTTON_ID;
 })(typeof globalThis !== 'undefined' ? globalThis : window);
