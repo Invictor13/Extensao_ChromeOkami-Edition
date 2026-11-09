@@ -28,4 +28,16 @@ describe('OkamiHUDRoot Custom Element', () => {
     // No light DOM não deve haver filhos diretos gerados
     expect(element.children.length).toBe(0);
   });
+
+  it('deve retornar false e não lançar exceção se customElements for null ou indefinido', () => {
+    const originalCustomElements = (globalThis as unknown as { customElements: unknown }).customElements;
+
+    (globalThis as unknown as { customElements: unknown }).customElements = null;
+    expect(registerOkamiHUDRoot()).toBe(false);
+
+    (globalThis as unknown as { customElements: unknown }).customElements = undefined;
+    expect(registerOkamiHUDRoot()).toBe(false);
+
+    (globalThis as unknown as { customElements: unknown }).customElements = originalCustomElements;
+  });
 });
