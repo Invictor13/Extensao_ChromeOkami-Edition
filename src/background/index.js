@@ -1,10 +1,10 @@
-import { EXTENSION_NAME, EXTENSION_VERSION } from '../shared/constants';
-import { logInfo, logError } from '../shared/utils/logger';
+import { EXTENSION_NAME, EXTENSION_VERSION } from '../shared/constants/index.js';
+import { logInfo, logError } from '../shared/utils/logger.js';
 
 /**
  * Ponto de entrada do Background Service Worker do Okami HUD.
  */
-export function initializeBackground(): void {
+export function initializeBackground() {
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime) {
       chrome.runtime.onInstalled.addListener((details) => {

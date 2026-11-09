@@ -5,13 +5,10 @@
   "description": "Okami HUD — interface minimalista, contextual e acionada por bordas para Google Chrome",
   "type": "module",
   "scripts": {
-    "dev": "vite build --watch",
-    "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint ."
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.0.0-beta.28",
     "@types/chrome": "^0.0.308",
     "@types/node": "^22.13.9",
     "@typescript-eslint/eslint-plugin": "^8.26.0",

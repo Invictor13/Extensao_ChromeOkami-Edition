@@ -4,13 +4,16 @@
   "version": "0.1.0",
   "description": "Interface minimalista, contextual e acionada por bordas para Google Chrome.",
   "background": {
-    "service_worker": "src/background/index.ts",
+    "service_worker": "src/background/index.js",
     "type": "module"
   },
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["src/content/index.ts"],
+      "js": [
+        "src/content/components/OkamiHUDRoot.js",
+        "src/content/index.js"
+      ],
       "run_at": "document_idle"
     }
   ],
