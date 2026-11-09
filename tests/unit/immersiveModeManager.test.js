@@ -237,6 +237,20 @@ describe('ImmersiveModeManager', () => {
       expect(globalThis.chrome.windows.update).toHaveBeenCalledWith(8, { state: 'fullscreen' });
     });
 
+    it('deve repassar comando toggle-hud-visibility para a aba ativa via mensagem', async () => {
+      setupImmersiveModeManager();
+      const commandListener = globalThis.chrome.commands.onCommand.addListener.mock.calls[0][0];
+
+      globalThis.chrome.tabs.query.mockResolvedValueOnce([{ id: 42 }]);
+
+      await commandListener('toggle-hud-visibility');
+
+      expect(globalThis.chrome.tabs.query).toHaveBeenCalledWith({ active: true, currentWindow: true });
+      expect(globalThis.chrome.tabs.sendMessage).toHaveBeenCalledWith(42, {
+        action: 'OKAMI_TOGGLE_HUD_VISIBILITY',
+      });
+    });
+
     it('deve recuperar inconsistência quando a janela sai de fullscreen externamente (ex: F11/Esc)', async () => {
       setupImmersiveModeManager();
       const boundsListener = globalThis.chrome.windows.onBoundsChanged.addListener.mock.calls[0][0];

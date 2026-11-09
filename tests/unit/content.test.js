@@ -9,6 +9,9 @@ import {
 describe('Content Script Ingestion', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    if (typeof globalThis.resetContentScriptStateForTesting === 'function') {
+      globalThis.resetContentScriptStateForTesting();
+    }
     document.body.innerHTML = '';
   });
 
@@ -104,5 +107,56 @@ describe('Content Script Ingestion', () => {
       expect.any(Function)
     );
     expect(root.hasExitButton()).toBe(true);
+  });
+
+  it('deve alternar a visibilidade do HUD ao receber mensagem TOGGLE_HUD_VISIBILITY', () => {
+    let capturedListener = null;
+    globalThis.chrome = {
+      runtime: {
+        onMessage: {
+          addListener: vi.fn((cb) => {
+            capturedListener = cb;
+          }),
+        },
+      },
+    };
+
+    globalThis.setupMessageListeners();
+    const root = globalThis.injectOkamiHUD();
+    root.setImmersiveState(true);
+    expect(root.isTopBarVisible()).toBe(false);
+
+    // Envia mensagem TOGGLE_HUD_VISIBILITY
+    capturedListener({ action: MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY });
+    expect(root.isTopBarVisible()).toBe(true);
+
+    // Envia mensagem novamente para fechar
+    capturedListener({ action: MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY });
+    expect(root.isTopBarVisible()).toBe(false);
+  });
+
+  it('deve bufferizar estado imersivo recebido antes da injeção do elemento raiz e aplicá-lo ao injetar', () => {
+    globalThis.applyImmersiveState(true);
+    expect(globalThis.getPendingImmersiveState()).toBe(true);
+
+    const root = globalThis.injectOkamiHUD();
+    expect(root.hasExitButton()).toBe(true);
+  });
+
+  it('não deve registrar listeners duplicados ao chamar setupMessageListeners múltiplas vezes', () => {
+    const addListenerSpy = vi.fn();
+    globalThis.chrome = {
+      runtime: {
+        onMessage: {
+          addListener: addListenerSpy,
+        },
+      },
+    };
+
+    globalThis.setupMessageListeners();
+    expect(addListenerSpy).toHaveBeenCalledTimes(1);
+
+    globalThis.setupMessageListeners();
+    expect(addListenerSpy).toHaveBeenCalledTimes(1);
   });
 });

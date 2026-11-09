@@ -33,6 +33,13 @@
         "mac": "Alt+Shift+F"
       },
       "description": "Alternar modo imersivo"
+    },
+    "toggle-hud-visibility": {
+      "suggested_key": {
+        "default": "Alt+Shift+H",
+        "mac": "Alt+Shift+H"
+      },
+      "description": "Mostrar ou ocultar o HUD superior"
     }
   }
 }

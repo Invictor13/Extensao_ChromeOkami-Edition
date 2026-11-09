@@ -30,13 +30,18 @@
         isImmersive: this._isImmersive,
       });
     }
-
     setImmersiveState(isImmersive) {
       this._isImmersive = Boolean(isImmersive);
       if (this._hudController && typeof this._hudController.setImmersiveState === 'function') {
         this._hudController.setImmersiveState(this._isImmersive);
       } else {
         updateHUDImmersiveStateInShadow(this._shadowRoot, this._isImmersive);
+      }
+    }
+
+    toggleTopBar() {
+      if (this._hudController && typeof this._hudController.toggleTopBar === 'function') {
+        this._hudController.toggleTopBar();
       }
     }
 
@@ -274,6 +279,15 @@
       topBar.classList.add('visible');
     }
 
+    function toggleTopBar() {
+      if (!isImmersive) return;
+      if (topBar.classList.contains('visible')) {
+        hideTopBarImmediately();
+      } else {
+        showTopBar();
+      }
+    }
+
     function scheduleHideTopBar() {
       if (hideTimer) {
         clearTimeout(hideTimer);
@@ -327,20 +341,75 @@
       }
     });
 
-    // Permite que movimentos do mouse próximos ao topo (<= 8px) detectados na janela ativem o HUD em modo imersivo
-    function handleWindowMouseMove(e) {
+    /**
+     * Trata movimentos do cursor na viewport.
+     * Suporta tanto PointerEvent quanto MouseEvent de forma unificada e confiável.
+     * Utiliza coordenadas da viewport (clientY) e ativa a barra imediatamente em clientY <= 8.
+     * Quando o cursor se afasta para clientY > 48 (fora da barra e trigger), agenda recolhimento.
+     */
+    let isEdgeTrackingAttached = false;
+
+    function handleGlobalPointerMove(e) {
       if (!isImmersive) return;
-      if (e.clientY <= 8) {
+
+      const clientY = typeof e.clientY === 'number' ? e.clientY : -1;
+      if (clientY >= 0 && clientY <= 8) {
         showTopBar();
+      } else if (clientY > 48 && !isHoveringTopBar && !isHoveringTrigger) {
+        if (topBar.classList.contains('visible') && !hideTimer) {
+          scheduleHideTopBar();
+        }
       }
     }
 
-    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-      window.addEventListener('mousemove', handleWindowMouseMove, { passive: true });
+    function attachEdgeTracking() {
+      if (isEdgeTrackingAttached) return;
+
+      const target = typeof window !== 'undefined' ? window : null;
+      if (target && typeof target.addEventListener === 'function') {
+        if ('PointerEvent' in target || typeof globalScope.PointerEvent !== 'undefined') {
+          target.addEventListener('pointermove', handleGlobalPointerMove, {
+            passive: true,
+            capture: true,
+          });
+        }
+        target.addEventListener('mousemove', handleGlobalPointerMove, {
+          passive: true,
+          capture: true,
+        });
+      }
+
+      isEdgeTrackingAttached = true;
+    }
+
+    function detachEdgeTracking() {
+      if (!isEdgeTrackingAttached) return;
+
+      const target = typeof window !== 'undefined' ? window : null;
+      if (target && typeof target.removeEventListener === 'function') {
+        if ('PointerEvent' in target || typeof globalScope.PointerEvent !== 'undefined') {
+          target.removeEventListener('pointermove', handleGlobalPointerMove, {
+            capture: true,
+          });
+        }
+        target.removeEventListener('mousemove', handleGlobalPointerMove, {
+          capture: true,
+        });
+      }
+
+      isEdgeTrackingAttached = false;
     }
 
     function setImmersiveState(active) {
       isImmersive = Boolean(active);
+      if (isImmersive) {
+        attachEdgeTracking();
+      } else {
+        detachEdgeTracking();
+        hideTopBarImmediately();
+        isHoveringTopBar = false;
+        isHoveringTrigger = false;
+      }
       updateHUDImmersiveStateInShadow(shadowRoot, isImmersive);
     }
 
@@ -349,20 +418,18 @@
 
     return {
       showTopBar,
+      toggleTopBar,
       scheduleHideTopBar,
       hideTopBarImmediately,
       setImmersiveState,
+      handleGlobalPointerMove,
+      isTopBarVisible: () => topBar.classList.contains('visible'),
       get isImmersive() {
         return isImmersive;
       },
       destroy() {
-        if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
-          window.removeEventListener('mousemove', handleWindowMouseMove);
-        }
-        if (hideTimer) {
-          clearTimeout(hideTimer);
-          hideTimer = null;
-        }
+        detachEdgeTracking();
+        hideTopBarImmediately();
       },
     };
   }

@@ -25,9 +25,10 @@ O Okami HUD combina o modo imersivo com uma barra superior contextual e acionada
 - **Ativação por clique**: Clique no ícone do Okami HUD na barra de ferramentas do Chrome.
 - **Alternância por atalho de teclado**: Pressione `Alt+Shift+F` para alternar (ativar/desativar).
   - É possível consultar ou personalizar o atalho acessando `chrome://extensions/shortcuts` no Chrome.
-- **HUD Superior Contextual (PR04)**:
+- **Atalho Dedicado do HUD Superior (PR04.1)**: Pressione `Alt+Shift+H` para mostrar ou ocultar a barra superior sob demanda durante o modo imersivo.
+- **HUD Superior Contextual (PR04 / PR04.1)**:
   - Oculto por padrão durante a navegação normal sem bloquear cliques ou rolagem na página hospedeira (`pointer-events: none`).
-  - Ativado automaticamente pela aproximação do cursor à borda superior da tela durante o modo imersivo.
+  - Ativado automaticamente pela aproximação do cursor à borda superior da tela durante o modo imersivo (`pointermove`/`mousemove` com `clientY <= 8`).
   - Animação suave de entrada (`slide-down` com fade) e saída (`slide-up`).
   - Permanece visível continuamente durante a interação do usuário na barra superior ou na zona de borda.
   - Recolhimento com atraso inteligente (~380ms) ao afastar o cursor para evitar desaparecimentos acidentais.
