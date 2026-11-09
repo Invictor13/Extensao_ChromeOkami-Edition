@@ -15,6 +15,7 @@
 
   let currentHudInstance = null;
   let currentShadowRoot = null;
+  let currentHUDController = null;
 
   function logInfo(message, ...args) {
     console.log(`[Okami HUD] ${message}`, ...args);
@@ -27,8 +28,10 @@
   function applyImmersiveState(isImmersive) {
     if (currentHudInstance && typeof currentHudInstance.setImmersiveState === 'function') {
       currentHudInstance.setImmersiveState(isImmersive);
-    } else if (currentShadowRoot && typeof globalScope.updateExitButtonInShadow === 'function') {
-      globalScope.updateExitButtonInShadow(currentShadowRoot, isImmersive);
+    } else if (currentHUDController && typeof currentHUDController.setImmersiveState === 'function') {
+      currentHUDController.setImmersiveState(isImmersive);
+    } else if (currentShadowRoot && typeof globalScope.updateHUDImmersiveStateInShadow === 'function') {
+      globalScope.updateHUDImmersiveStateInShadow(currentShadowRoot, isImmersive);
     }
   }
 
@@ -109,7 +112,7 @@
         const shadowRoot = hudRoot.attachShadow({ mode: 'closed' });
         currentShadowRoot = shadowRoot;
         if (typeof globalScope.renderOkamiHUDInShadow === 'function') {
-          globalScope.renderOkamiHUDInShadow(shadowRoot);
+          currentHUDController = globalScope.renderOkamiHUDInShadow(shadowRoot);
         }
       }
 
@@ -130,6 +133,7 @@
   globalScope.applyImmersiveState = applyImmersiveState;
   globalScope.setupMessageListeners = setupMessageListeners;
   globalScope.queryInitialState = queryInitialState;
+  globalScope.getCurrentHUDController = () => currentHUDController;
 
   // Inicializa a injeção e comunicação respeitando o estado do DOM
   if (typeof document !== 'undefined') {

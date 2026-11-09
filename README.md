@@ -18,15 +18,24 @@ A extensão foi projetada em **arquitetura nativa Manifest V3**, permitindo o ca
 
 ---
 
-## 🖥️ Modo Imersivo (PR03)
+## 🖥️ Modo Imersivo e HUD Superior (PR03 / PR04)
 
-O Modo Imersivo permite focar completamente na página ou aplicativo web, controlando o fullscreen do Chrome com segurança e sem reter o usuário:
+O Okami HUD combina o modo imersivo com uma barra superior contextual e acionada por bordas, projetada para foco total no conteúdo web:
 
 - **Ativação por clique**: Clique no ícone do Okami HUD na barra de ferramentas do Chrome.
 - **Alternância por atalho de teclado**: Pressione `Alt+Shift+F` para alternar (ativar/desativar).
   - É possível consultar ou personalizar o atalho acessando `chrome://extensions/shortcuts` no Chrome.
-- **Botão de saída visual**: Quando em modo imersivo, um botão discreto de saída (*✕ Sair do Modo Imersivo*) é exibido de forma isolada no topo direito da tela, sem interferir no conteúdo da página.
-- **Saídas nativas**: É possível sair a qualquer momento por `F11` ou `Esc` nativos do sistema. O estado é automaticamente sincronizado.
+- **HUD Superior Contextual (PR04)**:
+  - Oculto por padrão durante a navegação normal sem bloquear cliques ou rolagem na página hospedeira (`pointer-events: none`).
+  - Ativado automaticamente pela aproximação do cursor à borda superior da tela durante o modo imersivo.
+  - Animação suave de entrada (`slide-down` com fade) e saída (`slide-up`).
+  - Permanece visível continuamente durante a interação do usuário na barra superior ou na zona de borda.
+  - Recolhimento com atraso inteligente (~380ms) ao afastar o cursor para evitar desaparecimentos acidentais.
+- **Estrutura da Barra Superior**:
+  - **Região Esquerda**: Identidade visual Okami (insígnia geométrica `◈ OKAMI HUD`) e espaço reservado para controles futuros.
+  - **Região Central**: Área estrutural reservada (pílula visual) para futuras funcionalidades de navegação.
+  - **Região Direita**: Controles do escopo atual, integrando o botão de saída do modo imersivo (*✕ Sair*).
+- **Saídas nativas**: É possível sair a qualquer momento por `F11` ou `Esc` nativos do sistema. O HUD e a barra são recolhidos e desativados imediatamente.
 
 ---
 
@@ -91,11 +100,12 @@ O projeto segue a convenção clássica e nativa de extensões Manifest V3:
 ## 📋 Roteiro de Validação Manual no Google Chrome
 
 1. **Carregamento Unpacked**: Carregue a pasta raiz da extensão em `chrome://extensions/`. Verifique se o Service Worker é ativado sem erros no console.
-2. **Ativação por Ícone**: Abra uma página normal (ex: `https://www.google.com`) e clique no ícone da extensão. A janela deve entrar em fullscreen e o botão visual de saída deve aparecer no topo direito.
-3. **Alternância por Atalho**: Pressione `Alt+Shift+F`. A janela deve alternar saindo de fullscreen. Pressionar novamente deve retornar ao fullscreen.
-4. **Customização de Atalho**: Acesse `chrome://extensions/shortcuts` e confirme que o atalho "Alternar modo imersivo" está registrado e customizável.
-5. **Saída por Botão Visual**: Em fullscreen, clique no botão "Sair do Modo Imersivo". A janela deve restaurar seu tamanho anterior (normal ou maximizado) e o botão deve desaparecer.
-6. **Troca de Abas em Modo Imersivo**: Com modo imersivo ativado, abra uma nova aba ou alterne de aba; o botão de saída deve permanecer visível em abas que suportam Content Scripts.
-7. **Páginas Protegidas (`chrome://`)**: Acesse uma aba como `chrome://settings/` ou `chrome://extensions/`. Ative o atalho `Alt+Shift+F` para entrar em fullscreen. Note que extensões não podem injetar Content Scripts em `chrome://`, mas o usuário ainda pode sair a qualquer momento pelo mesmo atalho (`Alt+Shift+F`) ou via `F11`/`Esc`.
-8. **Saída Nativa**: Em fullscreen, saia pressionando `F11`. Ao navegar ou interagir, o botão de saída desaparece automaticamente pela sincronização via `onBoundsChanged`.
-9. **Fechamento e Reinicialização**: Feche a janela durante o modo imersivo. Ao abrir uma nova janela, o estado não persiste indevidamente fullscreen graças ao uso de `chrome.storage.session`.
+2. **Ativação por Ícone ou Atalho**: Abra uma página HTTPS comum (ex: `https://www.google.com` ou `https://example.com`) e ative o modo imersivo via clique no ícone da extensão ou pressionando `Alt+Shift+F`. A janela entrará em fullscreen.
+3. **Ocultação Inicial**: Ao entrar no modo imersivo, a barra superior permanece recolhida/oculta no topo, permitindo visualização completa e sem bloqueio do conteúdo da página.
+4. **Aproximação da Borda Superior**: Mova o cursor do mouse em direção à borda superior da tela (topo 0 a 8px). A barra superior do Okami HUD deslizará suavemente para baixo com animação translúcida refinada.
+5. **Interação com a Barra**: Mova o cursor sobre os elementos da barra superior (identidade Okami, área central e botão de saída). A barra permanece totalmente aberta e visível enquanto você interage com ela.
+6. **Recolhimento com Atraso**: Afaste o cursor da barra superior para o meio ou parte inferior da página. A barra aguarda um pequeno atraso (~380ms) e então se recolhe suavemente para cima, evitando fechamentos acidentais.
+7. **Saída pelo Botão Visual**: Aproxime o mouse da borda superior para exibir a barra e clique no botão `✕ Sair`. A janela sai imediatamente do modo imersivo, restaurando o tamanho anterior, e a barra é desabilitada.
+8. **Alternância por Atalho**: Pressione `Alt+Shift+F` para reentrar no modo imersivo e pressione novamente para sair. A barra é ativada e desativada em perfeita sincronia com o atalho.
+9. **Sincronização entre Abas**: Com o modo imersivo ativado, alterne entre abas que suportam Content Scripts; a barra superior e o acionador por borda continuam funcionando uniformemente em todas as abas da janela.
+10. **Saída Nativa (`F11`/`Esc`)**: Em modo imersivo, saia pressionando `F11` ou `Esc`. O HUD e o gatilho de borda são imediatamente desabilitados pela sincronização de `onBoundsChanged`.
