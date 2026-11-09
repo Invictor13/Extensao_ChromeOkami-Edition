@@ -6,7 +6,11 @@
 (function (globalScope) {
   const OKAMI_HUD_CUSTOM_ELEMENT = 'okami-hud-root';
   const OKAMI_HUD_INDICATOR_ID = 'okami-hud-init-indicator';
+  const OKAMI_HUD_TOP_BAR_ID = 'okami-hud-top-bar';
+  const OKAMI_HUD_TRIGGER_ZONE_ID = 'okami-hud-top-trigger';
   const OKAMI_HUD_EXIT_BUTTON_ID = 'okami-hud-exit-btn';
+
+  const HUD_AUTOHIDE_DELAY_MS = 380;
 
   class OkamiHUDRoot extends HTMLElement {
     constructor() {
@@ -14,6 +18,7 @@
       // Shadow DOM fechado conforme decisão de arquitetura
       this._shadowRoot = this.attachShadow({ mode: 'closed' });
       this._isImmersive = false;
+      this._hudController = null;
     }
 
     connectedCallback() {
@@ -21,12 +26,18 @@
     }
 
     render() {
-      renderOkamiHUDInShadow(this._shadowRoot, { isImmersive: this._isImmersive });
+      this._hudController = renderOkamiHUDInShadow(this._shadowRoot, {
+        isImmersive: this._isImmersive,
+      });
     }
 
     setImmersiveState(isImmersive) {
       this._isImmersive = Boolean(isImmersive);
-      updateExitButtonInShadow(this._shadowRoot, this._isImmersive);
+      if (this._hudController && typeof this._hudController.setImmersiveState === 'function') {
+        this._hudController.setImmersiveState(this._isImmersive);
+      } else {
+        updateHUDImmersiveStateInShadow(this._shadowRoot, this._isImmersive);
+      }
     }
 
     /**
@@ -41,16 +52,154 @@
     }
 
     hasExitButton() {
+      const exitBtn =
+        typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_EXIT_BUTTON_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_EXIT_BUTTON_ID}`);
+      return exitBtn !== null;
+    }
+
+    hasTopBar() {
       return (
         (typeof this._shadowRoot.getElementById === 'function'
-          ? this._shadowRoot.getElementById(OKAMI_HUD_EXIT_BUTTON_ID)
-          : this._shadowRoot.querySelector(`#${OKAMI_HUD_EXIT_BUTTON_ID}`)) !== null
+          ? this._shadowRoot.getElementById(OKAMI_HUD_TOP_BAR_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_TOP_BAR_ID}`)) !== null
       );
+    }
+
+    isTopBarVisible() {
+      const topBar =
+        typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_TOP_BAR_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_TOP_BAR_ID}`);
+      return Boolean(topBar && topBar.classList.contains('visible'));
+    }
+
+    getHUDController() {
+      return this._hudController;
     }
   }
 
   /**
-   * Adiciona ou remove o botão de saída do modo imersivo dentro do Shadow Root.
+   * Constrói o botão de saída do modo imersivo.
+   */
+  function createExitButtonElement() {
+    const exitBtn = document.createElement('button');
+    exitBtn.id = OKAMI_HUD_EXIT_BUTTON_ID;
+    exitBtn.className = 'okami-exit-btn';
+    exitBtn.type = 'button';
+    exitBtn.title = 'Sair do Modo Imersivo (Alt+Shift+F)';
+    exitBtn.setAttribute('aria-label', 'Sair do Modo Imersivo');
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'okami-exit-icon';
+    iconSpan.textContent = '✕';
+    iconSpan.setAttribute('aria-hidden', 'true');
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'okami-exit-text';
+    textSpan.textContent = 'Sair';
+
+    exitBtn.appendChild(iconSpan);
+    exitBtn.appendChild(textSpan);
+
+    exitBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof globalScope.requestExitImmersiveMode === 'function') {
+        globalScope.requestExitImmersiveMode();
+      }
+    });
+
+    return exitBtn;
+  }
+
+  /**
+   * Constrói o elemento da Barra Superior com três regiões distintas:
+   * - Esquerda: Identidade visual Okami (insígnia/logo) + espaço para controles futuros.
+   * - Central: Área estrutural reservada para futuras funcionalidades de navegação.
+   * - Direita: Controles do escopo atual (slot reservado para botão de saída).
+   */
+  function createTopBarElement() {
+    const topBar = document.createElement('header');
+    topBar.id = OKAMI_HUD_TOP_BAR_ID;
+    topBar.className = 'okami-top-bar';
+    topBar.setAttribute('role', 'toolbar');
+    topBar.setAttribute('aria-label', 'Okami HUD - Barra Superior de Navegação');
+
+    // 1. Região Esquerda
+    const leftSection = document.createElement('div');
+    leftSection.className = 'okami-bar-section okami-section-left';
+
+    const brand = document.createElement('div');
+    brand.className = 'okami-brand';
+    brand.setAttribute('title', 'Okami HUD');
+
+    const brandIcon = document.createElement('span');
+    brandIcon.className = 'okami-brand-icon';
+    brandIcon.textContent = '◈'; // Símbolo geométrico refinado para Okami
+    brandIcon.setAttribute('aria-hidden', 'true');
+
+    const brandName = document.createElement('span');
+    brandName.className = 'okami-brand-name';
+    brandName.textContent = 'OKAMI';
+
+    const brandBadge = document.createElement('span');
+    brandBadge.className = 'okami-brand-badge';
+    brandBadge.textContent = 'HUD';
+
+    brand.appendChild(brandIcon);
+    brand.appendChild(brandName);
+    brand.appendChild(brandBadge);
+
+    const leftControlsSlot = document.createElement('div');
+    leftControlsSlot.className = 'okami-slot okami-slot-left';
+    leftControlsSlot.setAttribute('aria-hidden', 'true');
+
+    leftSection.appendChild(brand);
+    leftSection.appendChild(leftControlsSlot);
+
+    // 2. Região Central (reservada estruturalmente)
+    const centerSection = document.createElement('div');
+    centerSection.className = 'okami-bar-section okami-section-center';
+
+    const centerPill = document.createElement('div');
+    centerPill.className = 'okami-center-pill';
+    centerPill.setAttribute('aria-hidden', 'true');
+
+    centerSection.appendChild(centerPill);
+
+    // 3. Região Direita
+    const rightSection = document.createElement('div');
+    rightSection.className = 'okami-bar-section okami-section-right';
+
+    const rightControlsSlot = document.createElement('div');
+    rightControlsSlot.className = 'okami-slot okami-slot-right';
+
+    rightSection.appendChild(rightControlsSlot);
+
+    topBar.appendChild(leftSection);
+    topBar.appendChild(centerSection);
+    topBar.appendChild(rightSection);
+
+    return topBar;
+  }
+
+  /**
+   * Constrói a zona sensível no topo da tela para acionar a barra quando o cursor se aproximar da borda.
+   */
+  function createTriggerZoneElement() {
+    const trigger = document.createElement('div');
+    trigger.id = OKAMI_HUD_TRIGGER_ZONE_ID;
+    trigger.className = 'okami-top-trigger';
+    trigger.setAttribute('aria-hidden', 'true');
+    return trigger;
+  }
+
+  /**
+   * Insere ou remove o botão de saída do modo imersivo dentro da árvore do Shadow DOM.
+   * Se existir a barra superior, insere dentro do slot da seção direita.
+   * Caso contrário (ex: dummy Shadow root isolado em testes da PR03), insere diretamente na raiz.
    */
   function updateExitButtonInShadow(shadowRoot, isImmersive) {
     if (!shadowRoot) return;
@@ -62,33 +211,13 @@
 
     if (isImmersive) {
       if (!exitBtn) {
-        exitBtn = document.createElement('button');
-        exitBtn.id = OKAMI_HUD_EXIT_BUTTON_ID;
-        exitBtn.className = 'okami-exit-btn';
-        exitBtn.type = 'button';
-        exitBtn.title = 'Sair do Modo Imersivo';
-        exitBtn.setAttribute('aria-label', 'Sair do Modo Imersivo');
-
-        const iconSpan = document.createElement('span');
-        iconSpan.className = 'okami-exit-icon';
-        iconSpan.textContent = '✕';
-
-        const textSpan = document.createElement('span');
-        textSpan.className = 'okami-exit-text';
-        textSpan.textContent = 'Sair do Modo Imersivo';
-
-        exitBtn.appendChild(iconSpan);
-        exitBtn.appendChild(textSpan);
-
-        exitBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (typeof globalScope.requestExitImmersiveMode === 'function') {
-            globalScope.requestExitImmersiveMode();
-          }
-        });
-
-        shadowRoot.appendChild(exitBtn);
+        exitBtn = createExitButtonElement();
+        const rightSlot = shadowRoot.querySelector?.('.okami-slot-right');
+        if (rightSlot) {
+          rightSlot.appendChild(exitBtn);
+        } else {
+          shadowRoot.appendChild(exitBtn);
+        }
       }
     } else {
       if (exitBtn && exitBtn.parentNode) {
@@ -98,7 +227,149 @@
   }
 
   /**
-   * Renderiza os estilos isolados, o badge inicial e opcionalmente o botão de saída dentro do Shadow DOM fechado fornecido.
+   * Atualiza o estado imersivo de todos os elementos na árvore do Shadow DOM.
+   */
+  function updateHUDImmersiveStateInShadow(shadowRoot, isImmersive) {
+    if (!shadowRoot) return;
+
+    const topBar =
+      typeof shadowRoot.getElementById === 'function'
+        ? shadowRoot.getElementById(OKAMI_HUD_TOP_BAR_ID)
+        : shadowRoot.querySelector?.(`#${OKAMI_HUD_TOP_BAR_ID}`);
+
+    const trigger =
+      typeof shadowRoot.getElementById === 'function'
+        ? shadowRoot.getElementById(OKAMI_HUD_TRIGGER_ZONE_ID)
+        : shadowRoot.querySelector?.(`#${OKAMI_HUD_TRIGGER_ZONE_ID}`);
+
+    if (topBar && trigger) {
+      if (isImmersive) {
+        topBar.classList.add('immersive-active');
+        trigger.classList.add('immersive-active');
+      } else {
+        topBar.classList.remove('immersive-active');
+        topBar.classList.remove('visible');
+        trigger.classList.remove('immersive-active');
+      }
+    }
+
+    updateExitButtonInShadow(shadowRoot, isImmersive);
+  }
+
+  /**
+   * Controlador e orquestrador de eventos da barra superior no Shadow DOM.
+   */
+  function setupHUDController(shadowRoot, topBar, triggerZone, initialImmersive = false) {
+    let isImmersive = Boolean(initialImmersive);
+    let hideTimer = null;
+    let isHoveringTopBar = false;
+    let isHoveringTrigger = false;
+
+    function showTopBar() {
+      if (!isImmersive) return;
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+      topBar.classList.add('visible');
+    }
+
+    function scheduleHideTopBar() {
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+      }
+      hideTimer = setTimeout(() => {
+        if (!isHoveringTopBar && !isHoveringTrigger) {
+          topBar.classList.remove('visible');
+        }
+        hideTimer = null;
+      }, HUD_AUTOHIDE_DELAY_MS);
+    }
+
+    function hideTopBarImmediately() {
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+      topBar.classList.remove('visible');
+    }
+
+    // Interações na zona de disparo superior
+    triggerZone.addEventListener('mouseenter', () => {
+      isHoveringTrigger = true;
+      showTopBar();
+    });
+
+    triggerZone.addEventListener('mouseleave', () => {
+      isHoveringTrigger = false;
+      scheduleHideTopBar();
+    });
+
+    // Interações na barra superior (mantém aberta durante o uso)
+    topBar.addEventListener('mouseenter', () => {
+      isHoveringTopBar = true;
+      showTopBar();
+    });
+
+    topBar.addEventListener('mouseleave', () => {
+      isHoveringTopBar = false;
+      scheduleHideTopBar();
+    });
+
+    // Mantém acessível via teclado dentro do Shadow DOM
+    topBar.addEventListener('focusin', () => {
+      showTopBar();
+    });
+
+    topBar.addEventListener('focusout', (e) => {
+      if (!topBar.contains(e.relatedTarget)) {
+        scheduleHideTopBar();
+      }
+    });
+
+    // Permite que movimentos do mouse próximos ao topo (<= 8px) detectados na janela ativem o HUD em modo imersivo
+    function handleWindowMouseMove(e) {
+      if (!isImmersive) return;
+      if (e.clientY <= 8) {
+        showTopBar();
+      }
+    }
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('mousemove', handleWindowMouseMove, { passive: true });
+    }
+
+    function setImmersiveState(active) {
+      isImmersive = Boolean(active);
+      updateHUDImmersiveStateInShadow(shadowRoot, isImmersive);
+    }
+
+    // Aplica o estado inicial
+    setImmersiveState(isImmersive);
+
+    return {
+      showTopBar,
+      scheduleHideTopBar,
+      hideTopBarImmediately,
+      setImmersiveState,
+      get isImmersive() {
+        return isImmersive;
+      },
+      destroy() {
+        if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+          window.removeEventListener('mousemove', handleWindowMouseMove);
+        }
+        if (hideTimer) {
+          clearTimeout(hideTimer);
+          hideTimer = null;
+        }
+      },
+    };
+  }
+
+  /**
+   * Renderiza os estilos isolados, a zona de ativação por borda, a barra superior e o badge inicial
+   * dentro do Shadow DOM fechado fornecido.
    */
   function renderOkamiHUDInShadow(shadowRoot, options = {}) {
     // Limpeza segura sem innerHTML com dados de terceiros
@@ -116,11 +387,211 @@
       width: 100vw;
       height: 100vh;
       pointer-events: none;
-      z-index: 2147483647; /* Máximo z-index seguro */
+      z-index: 2147483647; /* Nível máximo e seguro de isolamento visual */
       display: block;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
+    *, *::before, *::after {
+      box-sizing: inherit;
+    }
+
+    /* Zona sensora no topo da tela para captura de aproximação do mouse */
+    .okami-top-trigger {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 8px;
+      pointer-events: none;
+      z-index: 2147483646;
+      background: transparent;
+    }
+
+    .okami-top-trigger.immersive-active {
+      pointer-events: auto; /* Torna a borda sensível exclusivamente durante o modo imersivo */
+    }
+
+    /* Barra Superior de Navegação Okami HUD */
+    .okami-top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 48px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+
+      /* Identidade Visual Okami: translúcida, minimalista e moderna */
+      background: rgba(13, 14, 18, 0.82);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.2);
+
+      color: #f3f4f8;
+      pointer-events: none; /* Desabilitado enquanto oculto */
+      user-select: none;
+
+      /* Animação suave e fluida de transição (slide + fade) */
+      transform: translateY(-100%);
+      opacity: 0;
+      visibility: hidden;
+      transition:
+        transform 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 0.22s ease-out,
+        visibility 0.26s;
+    }
+
+    /* Estado visível da barra superior */
+    .okami-top-bar.immersive-active.visible {
+      transform: translateY(0);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto; /* Habilita interação exclusiva na barra */
+    }
+
+    /* Seções estruturais da barra */
+    .okami-bar-section {
+      display: flex;
+      align-items: center;
+      height: 100%;
+    }
+
+    /* Região Esquerda: Identidade Visual Okami */
+    .okami-section-left {
+      flex: 0 0 auto;
+      gap: 12px;
+    }
+
+    .okami-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: default;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+    }
+
+    .okami-brand-icon {
+      font-size: 15px;
+      color: #ff3344; /* Vermelho carmesim característico Okami */
+      filter: drop-shadow(0 0 6px rgba(255, 51, 68, 0.6));
+      line-height: 1;
+    }
+
+    .okami-brand-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f7f7fa;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+
+    .okami-brand-badge {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #b0b4c3;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .okami-slot-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Região Central: Área estrutural reservada */
+    .okami-section-center {
+      flex: 1 1 auto;
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .okami-center-pill {
+      width: min(420px, 100%);
+      height: 28px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .okami-center-pill:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Região Direita: Controles e Botão de Saída */
+    .okami-section-right {
+      flex: 0 0 auto;
+      gap: 10px;
+    }
+
+    .okami-slot-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .okami-exit-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.07);
+      color: #f1f2f6;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      cursor: pointer;
+      user-select: none;
+      outline: none;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .okami-exit-btn:hover {
+      background: rgba(255, 51, 68, 0.18);
+      border-color: rgba(255, 51, 68, 0.45);
+      color: #ffffff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(255, 51, 68, 0.25);
+    }
+
+    .okami-exit-btn:focus-visible {
+      border-color: #ff3344;
+      box-shadow: 0 0 0 2px rgba(255, 51, 68, 0.4);
+    }
+
+    .okami-exit-btn:active {
+      transform: translateY(0);
+      background: rgba(255, 51, 68, 0.28);
+    }
+
+    .okami-exit-icon {
+      font-size: 11px;
+      line-height: 1;
+      opacity: 0.85;
+    }
+
+    .okami-exit-text {
+      line-height: 1;
+      letter-spacing: 0.2px;
+    }
+
+    /* Badge sutil de inicialização (desaparece após 3.5s) */
     .okami-init-badge {
       position: absolute;
       bottom: 12px;
@@ -139,50 +610,10 @@
       transition: opacity 0.5s ease-out;
       user-select: none;
     }
-
-    .okami-exit-btn {
-      position: absolute;
-      top: 14px;
-      right: 18px;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      border-radius: 20px;
-      background: rgba(22, 22, 28, 0.88);
-      color: #ffffff;
-      font-size: 12px;
-      font-weight: 500;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      backdrop-filter: blur(12px);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-      cursor: pointer;
-      pointer-events: auto; /* Permite clique sem bloquear o restante da tela */
-      user-select: none;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-
-    .okami-exit-btn:hover {
-      background: rgba(40, 40, 52, 0.95);
-      border-color: rgba(255, 255, 255, 0.35);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-    }
-
-    .okami-exit-btn:active {
-      transform: translateY(0);
-      background: rgba(20, 20, 26, 0.95);
-    }
-
-    .okami-exit-icon {
-      font-size: 13px;
-      line-height: 1;
-    }
-
-    .okami-exit-text {
-      line-height: 1;
-    }
   `;
+
+    const triggerZone = createTriggerZoneElement();
+    const topBar = createTopBarElement();
 
     const badge = document.createElement('div');
     badge.id = OKAMI_HUD_INDICATOR_ID;
@@ -190,11 +621,16 @@
     badge.textContent = 'Okami HUD Ready';
 
     shadowRoot.appendChild(style);
+    shadowRoot.appendChild(triggerZone);
+    shadowRoot.appendChild(topBar);
     shadowRoot.appendChild(badge);
 
-    if (options.isImmersive) {
-      updateExitButtonInShadow(shadowRoot, true);
-    }
+    const controller = setupHUDController(
+      shadowRoot,
+      topBar,
+      triggerZone,
+      Boolean(options.isImmersive)
+    );
 
     // O indicador mínimo desaparece suavemente após 3.5 segundos para não poluir a interface
     setTimeout(() => {
@@ -205,6 +641,8 @@
         }
       }, 600);
     }, 3500);
+
+    return controller;
   }
 
   /**
@@ -230,8 +668,16 @@
   globalScope.OkamiHUDRoot = OkamiHUDRoot;
   globalScope.renderOkamiHUDInShadow = renderOkamiHUDInShadow;
   globalScope.updateExitButtonInShadow = updateExitButtonInShadow;
+  globalScope.updateHUDImmersiveStateInShadow = updateHUDImmersiveStateInShadow;
   globalScope.registerOkamiHUDRoot = registerOkamiHUDRoot;
+  globalScope.createExitButtonElement = createExitButtonElement;
+  globalScope.createTopBarElement = createTopBarElement;
+  globalScope.createTriggerZoneElement = createTriggerZoneElement;
+  globalScope.setupHUDController = setupHUDController;
   globalScope.OKAMI_HUD_CUSTOM_ELEMENT = OKAMI_HUD_CUSTOM_ELEMENT;
   globalScope.OKAMI_HUD_INDICATOR_ID = OKAMI_HUD_INDICATOR_ID;
+  globalScope.OKAMI_HUD_TOP_BAR_ID = OKAMI_HUD_TOP_BAR_ID;
+  globalScope.OKAMI_HUD_TRIGGER_ZONE_ID = OKAMI_HUD_TRIGGER_ZONE_ID;
   globalScope.OKAMI_HUD_EXIT_BUTTON_ID = OKAMI_HUD_EXIT_BUTTON_ID;
+  globalScope.HUD_AUTOHIDE_DELAY_MS = HUD_AUTOHIDE_DELAY_MS;
 })(typeof globalThis !== 'undefined' ? globalThis : window);
