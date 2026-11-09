@@ -1,6 +1,6 @@
 import { OKAMI_HUD_CUSTOM_ELEMENT } from '../shared/constants';
 import { logInfo, logError } from '../shared/utils/logger';
-import { registerOkamiHUDRoot } from './components/OkamiHUDRoot';
+import { registerOkamiHUDRoot, renderOkamiHUDInShadow, OkamiHUDRoot } from './components/OkamiHUDRoot';
 
 /**
  * Injeta a instância raiz do Okami HUD no DOM da página hospedeira.
@@ -15,11 +15,21 @@ export function injectOkamiHUD(): HTMLElement | null {
       return existingInstance as HTMLElement;
     }
 
-    // Registra o Custom Element
+    // Registra o Custom Element se suportado no contexto de execução
     registerOkamiHUDRoot();
 
-    // Cria e insere o elemento raiz
+    // Cria o elemento raiz
     const hudRoot = document.createElement(OKAMI_HUD_CUSTOM_ELEMENT);
+
+    // Em content scripts isolados do Chrome, window.customElements é null por padrão de segurança
+    // e o elemento não é instanciado como OkamiHUDRoot.
+    // Nesses casos, acoplamos o Shadow DOM fechado diretamente no elemento para garantir
+    // o mesmo isolamento estético e a renderização do HUD.
+    if (!(hudRoot instanceof OkamiHUDRoot)) {
+      const shadowRoot = hudRoot.attachShadow({ mode: 'closed' });
+      renderOkamiHUDInShadow(shadowRoot);
+    }
+
     (document.body || document.documentElement).appendChild(hudRoot);
 
     logInfo('Okami HUD injetado com sucesso com isolamento Shadow DOM.');

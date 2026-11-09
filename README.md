@@ -33,13 +33,27 @@ npm ci
 
 ## 🌐 Como Carregar a Extensão no Google Chrome
 
-Após compilar o projeto (`npm run build`), carregue a extensão descompactada no Chrome:
+### ⚠️ Importante: Carregue sempre a pasta `dist/`
 
-1. Abra o Google Chrome e navegue até `chrome://extensions/`.
-2. No canto superior direito, ative o **Modo do desenvolvedor** (*Developer mode*).
-3. No canto superior esquerdo, clique no botão **Carregar sem compactação** (*Load unpacked*).
-4. Selecione a pasta **`dist/`** gerada na raiz do repositório.
-5. A extensão **Okami HUD** estará carregada e pronta para uso.
+> **NUNCA carregue a raiz do repositório no Chrome.**
+>
+> O arquivo `manifest.json` na raiz é o **manifesto-fonte** utilizado pelo Vite e `@crxjs/vite-plugin`, referenciando arquivos TypeScript (`.ts`). O Chrome não executa TypeScript nativamente. Se você tentar carregar a raiz do projeto, o Chrome emitirá o erro:
+> ```text
+> Invalid script mime type: Não foi possível carregar o arquivo "src/content/index.ts" para o script de conteúdo. Esse tipo de script só pode ser carregado de arquivos JavaScript compatíveis, como .js.
+> ```
+> O comando `npm run build` compila o TypeScript, empacota os módulos e gera o manifesto final em **`dist/manifest.json`**. A pasta **`dist/`** é 100% autossuficiente e contém todos os scripts JavaScript (`.js`), páginas HTML e recursos compilados necessários para a instalação.
+
+### Passo a passo para instalação
+
+1. Certifique-se de ter construído a extensão executando:
+   ```bash
+   npm run build
+   ```
+2. Abra o Google Chrome e navegue até `chrome://extensions/`.
+3. No canto superior direito, ative o botão **Modo do desenvolvedor** (*Developer mode*).
+4. No canto superior esquerdo, clique no botão **Carregar sem compactação** (*Load unpacked*).
+5. No seletor de arquivos, selecione a pasta **`dist/`** (gerada na raiz do projeto).
+6. A extensão **Okami HUD** será carregada e estará ativa.
 
 ---
 
