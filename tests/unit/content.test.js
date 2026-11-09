@@ -159,4 +159,23 @@ describe('Content Script Ingestion', () => {
     globalThis.setupMessageListeners();
     expect(addListenerSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('deve responder à mensagem OKAMI_PING com { status: "ok" }', () => {
+    let capturedListener = null;
+    globalThis.chrome = {
+      runtime: {
+        onMessage: {
+          addListener: vi.fn((cb) => {
+            capturedListener = cb;
+          }),
+        },
+      },
+    };
+
+    globalThis.setupMessageListeners();
+    const sendResponseSpy = vi.fn();
+    capturedListener({ action: MESSAGE_ACTIONS.PING }, {}, sendResponseSpy);
+
+    expect(sendResponseSpy).toHaveBeenCalledWith({ status: 'ok', version: '0.1.0' });
+  });
 });

@@ -68,18 +68,119 @@ export async function removeWindowState(windowId) {
 }
 
 /**
- * Notifica com segurança uma aba sobre a alteração do modo imersivo.
+ * Verifica se a URL de uma aba é suportada para injeção e comunicação de Content Scripts.
+ * Bloqueia páginas internas do navegador (chrome://, devtools://, about:, chrome-extension://)
+ * e o Chrome Web Store onde injeção não é permitida por segurança.
+ */
+export function isSupportedUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim().toLowerCase();
+
+  if (
+    trimmed.startsWith('chrome://') ||
+    trimmed.startsWith('chrome-extension://') ||
+    trimmed.startsWith('devtools://') ||
+    trimmed.startsWith('about:') ||
+    trimmed.startsWith('view-source:') ||
+    trimmed.includes('chromewebstore.google.com') ||
+    trimmed.includes('chrome.google.com/webstore')
+  ) {
+    return false;
+  }
+
+  return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+}
+
+/**
+ * Envia um ping para o Content Script de uma aba para testar se ele está ativo e respondendo.
+ */
+export async function pingContentScript(tabId) {
+  try {
+    if (typeof chrome === 'undefined' || !chrome.tabs?.sendMessage) return false;
+    const response = await chrome.tabs.sendMessage(tabId, { action: MESSAGE_ACTIONS.PING });
+    return Boolean(response && response.status === 'ok');
+  } catch (_err) {
+    return false;
+  }
+}
+
+/**
+ * Garante que o Content Script esteja carregado e pronto na aba especificada.
+ * Caso não esteja ativo e a aba seja elegível (HTTP/HTTPS), realiza injeção programática
+ * de recuperação utilizando a API chrome.scripting.
+ */
+export async function ensureContentScript(tabId) {
+  try {
+    if (typeof chrome === 'undefined' || !chrome.tabs?.get) return false;
+
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab || !tab.url || !isSupportedUrl(tab.url)) {
+      return false;
+    }
+
+    // Testa se o Content Script já está ativo e respondendo
+    const isAlive = await pingContentScript(tabId);
+    if (isAlive) {
+      return true;
+    }
+
+    // Se a API chrome.scripting estiver disponível, injeta os scripts na mesma ordem do manifesto
+    if (chrome.scripting?.executeScript) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: [
+            'src/content/components/OkamiHUDRoot.js',
+            'src/content/index.js',
+          ],
+        });
+
+        // Aguarda breve confirmação de inicialização
+        const confirmed = await pingContentScript(tabId);
+        if (confirmed) {
+          logInfo(`Content Script recuperado com sucesso na aba ${tabId} (${tab.url})`);
+          return true;
+        }
+      } catch (injectionError) {
+        // Registra se for um erro inesperado de permissão ou execução
+        logError(`Falha na injeção programática de recuperação na aba ${tabId}:`, injectionError);
+        return false;
+      }
+    }
+
+    return false;
+  } catch (err) {
+    logError(`Erro ao verificar ou recuperar Content Script na aba ${tabId}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Notifica com segurança uma aba sobre a alteração do modo imersivo com recuperação programática se necessário.
  */
 export async function notifyTab(tabId, isImmersive) {
   try {
-    if (typeof chrome !== 'undefined' && chrome.tabs?.sendMessage) {
+    if (typeof chrome === 'undefined' || !chrome.tabs?.sendMessage) return;
+
+    // Tenta envio direto
+    try {
       await chrome.tabs.sendMessage(tabId, {
         action: MESSAGE_ACTIONS.IMMERSIVE_STATE_CHANGED,
         isImmersive,
       });
+      return;
+    } catch (_sendErr) {
+      // Falha direta: tenta recuperar se for uma aba suportada
+      const ready = await ensureContentScript(tabId);
+      if (ready) {
+        await chrome.tabs.sendMessage(tabId, {
+          action: MESSAGE_ACTIONS.IMMERSIVE_STATE_CHANGED,
+          isImmersive,
+        });
+      }
     }
   } catch (_err) {
-    // Falha silenciosa e esperada em abas onde content script não executa (chrome://, webstore, etc)
+    // Falha silenciosa e controlada em abas onde content script não executa
   }
 }
 
@@ -92,7 +193,7 @@ export async function broadcastWindowImmersiveState(windowId, isImmersive) {
       const tabs = await chrome.tabs.query({ windowId });
       for (const tab of tabs) {
         if (tab.id) {
-          notifyTab(tab.id, isImmersive);
+          await notifyTab(tab.id, isImmersive);
         }
       }
     }
@@ -259,9 +360,28 @@ export function setupImmersiveModeManager() {
         } else if (command === COMMAND_TOGGLE_HUD_VISIBILITY) {
           const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
           if (activeTab?.id) {
-            await chrome.tabs.sendMessage(activeTab.id, {
-              action: MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY,
-            });
+            if (activeTab.url && !isSupportedUrl(activeTab.url)) {
+              // Em páginas restritas, não polui log com falhas esperadas
+              return;
+            }
+
+            try {
+              await chrome.tabs.sendMessage(activeTab.id, {
+                action: MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY,
+              });
+            } catch (_err) {
+              // Recupera content script se ausente e tenta reenviar
+              const ready = await ensureContentScript(activeTab.id);
+              if (ready) {
+                try {
+                  await chrome.tabs.sendMessage(activeTab.id, {
+                    action: MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY,
+                  });
+                } catch (retryErr) {
+                  logError(`Erro ao enviar '${COMMAND_TOGGLE_HUD_VISIBILITY}' após recuperação:`, retryErr);
+                }
+              }
+            }
           }
         }
       } catch (err) {

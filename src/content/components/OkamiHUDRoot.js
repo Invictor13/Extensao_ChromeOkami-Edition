@@ -9,8 +9,10 @@
   const OKAMI_HUD_TOP_BAR_ID = 'okami-hud-top-bar';
   const OKAMI_HUD_TRIGGER_ZONE_ID = 'okami-hud-top-trigger';
   const OKAMI_HUD_EXIT_BUTTON_ID = 'okami-hud-exit-btn';
+  const OKAMI_HUD_TOAST_ID = 'okami-hud-toast-feedback';
 
   const HUD_AUTOHIDE_DELAY_MS = 380;
+  const HUD_INITIAL_REVEAL_DURATION_MS = 1800;
 
   class OkamiHUDRoot extends HTMLElement {
     constructor() {
@@ -30,10 +32,11 @@
         isImmersive: this._isImmersive,
       });
     }
-    setImmersiveState(isImmersive) {
+    setImmersiveState(isImmersive, options = {}) {
       this._isImmersive = Boolean(isImmersive);
+      const shouldFlash = typeof options === 'boolean' ? options : (options?.flash ?? false);
       if (this._hudController && typeof this._hudController.setImmersiveState === 'function') {
-        this._hudController.setImmersiveState(this._isImmersive);
+        this._hudController.setImmersiveState(this._isImmersive, shouldFlash);
       } else {
         updateHUDImmersiveStateInShadow(this._shadowRoot, this._isImmersive);
       }
@@ -262,11 +265,61 @@
   }
 
   /**
+   * Apresenta um toast informativo temporário e discreto dentro do Shadow DOM.
+   */
+  function showToastFeedback(shadowRoot, message, durationMs = 2600) {
+    if (!shadowRoot) return;
+
+    let existingToast =
+      typeof shadowRoot.getElementById === 'function'
+        ? shadowRoot.getElementById(OKAMI_HUD_TOAST_ID)
+        : shadowRoot.querySelector?.(`#${OKAMI_HUD_TOAST_ID}`);
+
+    if (existingToast && existingToast.parentNode) {
+      existingToast.parentNode.removeChild(existingToast);
+    }
+
+    const toast = document.createElement('div');
+    toast.id = OKAMI_HUD_TOAST_ID;
+    toast.className = 'okami-toast-feedback';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+
+    const icon = document.createElement('span');
+    icon.className = 'okami-toast-icon';
+    icon.textContent = '◈';
+    icon.setAttribute('aria-hidden', 'true');
+
+    const text = document.createElement('span');
+    text.className = 'okami-toast-text';
+    text.textContent = message;
+
+    toast.appendChild(icon);
+    toast.appendChild(text);
+    shadowRoot.appendChild(toast);
+
+    // Animação de entrada
+    requestAnimationFrame(() => {
+      toast.classList.add('visible');
+    });
+
+    setTimeout(() => {
+      toast.classList.remove('visible');
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 350);
+    }, durationMs);
+  }
+
+  /**
    * Controlador e orquestrador de eventos da barra superior no Shadow DOM.
    */
   function setupHUDController(shadowRoot, topBar, triggerZone, initialImmersive = false) {
     let isImmersive = Boolean(initialImmersive);
     let hideTimer = null;
+    let initialRevealTimer = null;
     let isHoveringTopBar = false;
     let isHoveringTrigger = false;
 
@@ -276,11 +329,23 @@
         clearTimeout(hideTimer);
         hideTimer = null;
       }
+      if (initialRevealTimer) {
+        clearTimeout(initialRevealTimer);
+        initialRevealTimer = null;
+      }
       topBar.classList.add('visible');
     }
 
     function toggleTopBar() {
-      if (!isImmersive) return;
+      if (!isImmersive) {
+        // Feedback visual discreto informando que o HUD está disponível no modo imersivo
+        showToastFeedback(
+          shadowRoot,
+          'Okami HUD disponível no modo imersivo (Alt+Shift+F)'
+        );
+        return;
+      }
+
       if (topBar.classList.contains('visible')) {
         hideTopBarImmediately();
       } else {
@@ -288,7 +353,7 @@
       }
     }
 
-    function scheduleHideTopBar() {
+    function scheduleHideTopBar(delay = HUD_AUTOHIDE_DELAY_MS) {
       if (hideTimer) {
         clearTimeout(hideTimer);
       }
@@ -297,7 +362,21 @@
           topBar.classList.remove('visible');
         }
         hideTimer = null;
-      }, HUD_AUTOHIDE_DELAY_MS);
+      }, delay);
+    }
+
+    function flashTopBar(duration = HUD_INITIAL_REVEAL_DURATION_MS) {
+      if (!isImmersive) return;
+      showTopBar();
+      if (initialRevealTimer) {
+        clearTimeout(initialRevealTimer);
+      }
+      initialRevealTimer = setTimeout(() => {
+        if (!isHoveringTopBar && !isHoveringTrigger) {
+          scheduleHideTopBar(HUD_AUTOHIDE_DELAY_MS);
+        }
+        initialRevealTimer = null;
+      }, duration);
     }
 
     function hideTopBarImmediately() {
@@ -400,15 +479,27 @@
       isEdgeTrackingAttached = false;
     }
 
-    function setImmersiveState(active) {
+    function setImmersiveState(active, options = {}) {
+      const wasImmersive = isImmersive;
       isImmersive = Boolean(active);
+      const shouldFlash = typeof options === 'boolean' ? options : (options?.flash ?? false);
+
       if (isImmersive) {
         attachEdgeTracking();
+        if (!wasImmersive && shouldFlash) {
+          flashTopBar(HUD_INITIAL_REVEAL_DURATION_MS);
+        } else if (!wasImmersive) {
+          hideTopBarImmediately();
+        }
       } else {
         detachEdgeTracking();
         hideTopBarImmediately();
         isHoveringTopBar = false;
         isHoveringTrigger = false;
+        if (initialRevealTimer) {
+          clearTimeout(initialRevealTimer);
+          initialRevealTimer = null;
+        }
       }
       updateHUDImmersiveStateInShadow(shadowRoot, isImmersive);
     }
@@ -419,6 +510,7 @@
     return {
       showTopBar,
       toggleTopBar,
+      flashTopBar,
       scheduleHideTopBar,
       hideTopBarImmediately,
       setImmersiveState,
@@ -430,6 +522,10 @@
       destroy() {
         detachEdgeTracking();
         hideTopBarImmediately();
+        if (initialRevealTimer) {
+          clearTimeout(initialRevealTimer);
+          initialRevealTimer = null;
+        }
       },
     };
   }
@@ -677,6 +773,47 @@
       transition: opacity 0.5s ease-out;
       user-select: none;
     }
+
+    /* Toast de feedback temporário (ex: Alt+Shift+H fora do modo imersivo) */
+    .okami-toast-feedback {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-16px);
+      background: rgba(15, 16, 21, 0.92);
+      color: #f0f1f6;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.4px;
+      pointer-events: none;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+      opacity: 0;
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease-out;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 2147483647;
+      user-select: none;
+    }
+
+    .okami-toast-feedback.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .okami-toast-icon {
+      color: #ff3344;
+      font-size: 13px;
+      line-height: 1;
+    }
+
+    .okami-toast-text {
+      line-height: 1;
+    }
   `;
 
     const triggerZone = createTriggerZoneElement();
@@ -746,5 +883,8 @@
   globalScope.OKAMI_HUD_TOP_BAR_ID = OKAMI_HUD_TOP_BAR_ID;
   globalScope.OKAMI_HUD_TRIGGER_ZONE_ID = OKAMI_HUD_TRIGGER_ZONE_ID;
   globalScope.OKAMI_HUD_EXIT_BUTTON_ID = OKAMI_HUD_EXIT_BUTTON_ID;
+  globalScope.OKAMI_HUD_TOAST_ID = OKAMI_HUD_TOAST_ID;
   globalScope.HUD_AUTOHIDE_DELAY_MS = HUD_AUTOHIDE_DELAY_MS;
+  globalScope.HUD_INITIAL_REVEAL_DURATION_MS = HUD_INITIAL_REVEAL_DURATION_MS;
+  globalScope.showToastFeedback = showToastFeedback;
 })(typeof globalThis !== 'undefined' ? globalThis : window);

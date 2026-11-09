@@ -11,6 +11,9 @@ import {
   exitImmersiveMode,
   toggleImmersiveMode,
   setupImmersiveModeManager,
+  isSupportedUrl,
+  pingContentScript,
+  ensureContentScript,
 } from '../../src/background/managers/ImmersiveModeManager.js';
 import {
   COMMAND_TOGGLE_IMMERSIVE,
@@ -60,6 +63,79 @@ describe('ImmersiveModeManager', () => {
         onMessage: { addListener: vi.fn() },
       },
     };
+  });
+
+  describe('Validação de URLs e Injeção de Recuperação', () => {
+    it('deve identificar URLs suportadas e restritas com isSupportedUrl', () => {
+      expect(isSupportedUrl('https://example.com')).toBe(true);
+      expect(isSupportedUrl('http://localhost:3000')).toBe(true);
+      expect(isSupportedUrl('chrome://extensions/')).toBe(false);
+      expect(isSupportedUrl('chrome-extension://xyz/newtab.html')).toBe(false);
+      expect(isSupportedUrl('about:blank')).toBe(false);
+      expect(isSupportedUrl('devtools://devtools/bundled/')).toBe(false);
+      expect(isSupportedUrl('https://chromewebstore.google.com/')).toBe(false);
+      expect(isSupportedUrl('https://chrome.google.com/webstore/detail/123')).toBe(false);
+      expect(isSupportedUrl('')).toBe(false);
+      expect(isSupportedUrl(null)).toBe(false);
+    });
+
+    it('deve verificar se content script responde com pingContentScript', async () => {
+      globalThis.chrome.tabs.sendMessage.mockResolvedValueOnce({ status: 'ok' });
+      expect(await pingContentScript(10)).toBe(true);
+      expect(globalThis.chrome.tabs.sendMessage).toHaveBeenCalledWith(10, {
+        action: MESSAGE_ACTIONS.PING,
+      });
+
+      globalThis.chrome.tabs.sendMessage.mockRejectedValueOnce(new Error('No receiver'));
+      expect(await pingContentScript(20)).toBe(false);
+    });
+
+    it('deve retornar false em ensureContentScript se a aba for restrita', async () => {
+      globalThis.chrome.tabs.get = vi.fn().mockResolvedValue({ id: 99, url: 'chrome://settings' });
+      const result = await ensureContentScript(99);
+      expect(result).toBe(false);
+    });
+
+    it('deve retornar true em ensureContentScript se o content script já estiver ativo', async () => {
+      globalThis.chrome.tabs.get = vi.fn().mockResolvedValue({ id: 50, url: 'https://example.com' });
+      globalThis.chrome.tabs.sendMessage.mockResolvedValueOnce({ status: 'ok' });
+
+      const result = await ensureContentScript(50);
+      expect(result).toBe(true);
+    });
+
+    it('deve tentar injeção programática via chrome.scripting se content script estiver ausente', async () => {
+      globalThis.chrome.tabs.get = vi.fn().mockResolvedValue({ id: 60, url: 'https://example.com' });
+      globalThis.chrome.scripting = {
+        executeScript: vi.fn().mockResolvedValue([]),
+      };
+
+      // 1º ping falha (ausente), 2º ping tem sucesso (após executeScript)
+      globalThis.chrome.tabs.sendMessage
+        .mockRejectedValueOnce(new Error('No receiver'))
+        .mockResolvedValueOnce({ status: 'ok' });
+
+      const result = await ensureContentScript(60);
+      expect(result).toBe(true);
+      expect(globalThis.chrome.scripting.executeScript).toHaveBeenCalledWith({
+        target: { tabId: 60 },
+        files: [
+          'src/content/components/OkamiHUDRoot.js',
+          'src/content/index.js',
+        ],
+      });
+    });
+
+    it('deve lidar com falha de injeção programática sem lançar exceções não tratadas', async () => {
+      globalThis.chrome.tabs.get = vi.fn().mockResolvedValue({ id: 70, url: 'https://example.com' });
+      globalThis.chrome.scripting = {
+        executeScript: vi.fn().mockRejectedValue(new Error('Cannot access contents of url')),
+      };
+      globalThis.chrome.tabs.sendMessage.mockRejectedValue(new Error('No receiver'));
+
+      const result = await ensureContentScript(70);
+      expect(result).toBe(false);
+    });
   });
 
   describe('Storage handling', () => {
