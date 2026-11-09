@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { initializeBackground } from '../../src/background/index';
+import { initializeBackground } from '../../src/background/index.js';
 
 describe('Background Service Worker', () => {
   beforeEach(() => {
@@ -11,7 +11,7 @@ describe('Background Service Worker', () => {
     const onStartupListener = vi.fn();
 
     // Mock chrome.runtime
-    (globalThis as unknown as { chrome: unknown }).chrome = {
+    globalThis.chrome = {
       runtime: {
         onInstalled: { addListener: onInstalledListener },
         onStartup: { addListener: onStartupListener },
@@ -24,11 +24,11 @@ describe('Background Service Worker', () => {
 
   it('deve lidar de forma segura quando executado fora do contexto de extensão', () => {
     // Mock ausente
-    const originalChrome = (globalThis as unknown as { chrome: unknown }).chrome;
-    (globalThis as unknown as { chrome: unknown }).chrome = undefined;
+    const originalChrome = globalThis.chrome;
+    globalThis.chrome = undefined;
 
     expect(() => initializeBackground()).not.toThrow();
 
-    (globalThis as unknown as { chrome: unknown }).chrome = originalChrome;
+    globalThis.chrome = originalChrome;
   });
 });
