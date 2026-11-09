@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import '../../src/content/components/OkamiHUDRoot.js';
 import '../../src/content/index.js';
-import { OKAMI_HUD_CUSTOM_ELEMENT } from '../../src/shared/constants/index.js';
+import {
+  OKAMI_HUD_CUSTOM_ELEMENT,
+  MESSAGE_ACTIONS,
+} from '../../src/shared/constants/index.js';
 
 describe('Content Script Ingestion', () => {
   beforeEach(() => {
@@ -43,5 +46,63 @@ describe('Content Script Ingestion', () => {
 
     createSpy.mockRestore();
     globalThis.customElements = originalCustomElements;
+  });
+
+  it('deve solicitar saída do modo imersivo via chrome.runtime.sendMessage', () => {
+    const sendMessageSpy = vi.fn();
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: sendMessageSpy,
+      },
+    };
+
+    globalThis.requestExitImmersiveMode();
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      { action: MESSAGE_ACTIONS.EXIT_IMMERSIVE },
+      expect.any(Function)
+    );
+  });
+
+  it('deve registrar listener para IMMERSIVE_STATE_CHANGED e atualizar o estado', () => {
+    let capturedListener = null;
+    globalThis.chrome = {
+      runtime: {
+        onMessage: {
+          addListener: vi.fn((cb) => {
+            capturedListener = cb;
+          }),
+        },
+      },
+    };
+
+    globalThis.setupMessageListeners();
+    expect(globalThis.chrome.runtime.onMessage.addListener).toHaveBeenCalled();
+
+    const root = globalThis.injectOkamiHUD();
+    capturedListener({ action: MESSAGE_ACTIONS.IMMERSIVE_STATE_CHANGED, isImmersive: true });
+    expect(root.hasExitButton()).toBe(true);
+
+    capturedListener({ action: MESSAGE_ACTIONS.IMMERSIVE_STATE_CHANGED, isImmersive: false });
+    expect(root.hasExitButton()).toBe(false);
+  });
+
+  it('deve consultar o estado inicial via GET_IMMERSIVE_STATE', () => {
+    const sendMessageSpy = vi.fn((msg, cb) => {
+      cb({ isImmersive: true });
+    });
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: sendMessageSpy,
+      },
+    };
+
+    const root = globalThis.injectOkamiHUD();
+    globalThis.queryInitialState();
+
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      { action: MESSAGE_ACTIONS.GET_IMMERSIVE_STATE },
+      expect.any(Function)
+    );
+    expect(root.hasExitButton()).toBe(true);
   });
 });
