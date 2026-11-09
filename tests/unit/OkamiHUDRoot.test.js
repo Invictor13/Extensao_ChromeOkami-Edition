@@ -214,4 +214,31 @@ describe('OkamiHUDRoot Custom Element', () => {
     element.toggleTopBar();
     expect(element.isTopBarVisible()).toBe(false);
   });
+
+  it('deve apresentar toast feedback ao acionar toggleTopBar fora do modo imersivo sem ativar fullscreen', () => {
+    const dummyShadow = document.createElement('div');
+    const controller = globalThis.renderOkamiHUDInShadow(dummyShadow, { isImmersive: false });
+
+    controller.toggleTopBar();
+    expect(controller.isTopBarVisible()).toBe(false);
+
+    const toast = dummyShadow.querySelector('#okami-hud-toast-feedback');
+    expect(toast).not.toBeNull();
+    expect(toast.textContent).toContain('Okami HUD disponível no modo imersivo (Alt+Shift+F)');
+  });
+
+  it('deve revelar brevemente a barra (flash) ao ativar modo imersivo quando configurado', () => {
+    const dummyShadow = document.createElement('div');
+    const controller = globalThis.renderOkamiHUDInShadow(dummyShadow, { isImmersive: false });
+
+    expect(controller.isTopBarVisible()).toBe(false);
+
+    // Ativa imersivo com flash
+    controller.setImmersiveState(true, { flash: true });
+    expect(controller.isTopBarVisible()).toBe(true);
+
+    // Avança tempo da revelação inicial (~1800ms) + hide delay (~380ms)
+    vi.advanceTimersByTime(2300);
+    expect(controller.isTopBarVisible()).toBe(false);
+  });
 });

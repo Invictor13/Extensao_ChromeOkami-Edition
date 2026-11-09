@@ -4,7 +4,12 @@
   "version": "0.1.0",
   "description": "Interface minimalista, contextual e acionada por bordas para Google Chrome.",
   "permissions": [
-    "storage"
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "src/background/index.js",

@@ -12,6 +12,7 @@
     GET_IMMERSIVE_STATE: 'OKAMI_GET_IMMERSIVE_STATE',
     IMMERSIVE_STATE_CHANGED: 'OKAMI_IMMERSIVE_STATE_CHANGED',
     TOGGLE_HUD_VISIBILITY: 'OKAMI_TOGGLE_HUD_VISIBILITY',
+    PING: 'OKAMI_PING',
   };
 
   let currentHudInstance = null;
@@ -28,14 +29,15 @@
     console.error(`[Okami HUD:Error] ${message}`, error);
   }
 
-  function applyImmersiveState(isImmersive) {
+  function applyImmersiveState(isImmersive, options = {}) {
     const state = Boolean(isImmersive);
     pendingImmersiveState = state;
+    const flash = typeof options === 'boolean' ? options : (options?.flash ?? false);
 
     if (currentHudInstance && typeof currentHudInstance.setImmersiveState === 'function') {
-      currentHudInstance.setImmersiveState(state);
+      currentHudInstance.setImmersiveState(state, { flash });
     } else if (currentHUDController && typeof currentHUDController.setImmersiveState === 'function') {
-      currentHUDController.setImmersiveState(state);
+      currentHUDController.setImmersiveState(state, { flash });
     } else if (currentShadowRoot && typeof globalScope.updateHUDImmersiveStateInShadow === 'function') {
       globalScope.updateHUDImmersiveStateInShadow(currentShadowRoot, state);
     }
@@ -72,10 +74,19 @@
     if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
     if (isMessageListenerRegistered) return;
 
-    chrome.runtime.onMessage.addListener((message) => {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       try {
+        if (message?.action === MESSAGE_ACTIONS.PING) {
+          if (typeof sendResponse === 'function') {
+            sendResponse({ status: 'ok', version: '0.1.0' });
+          }
+          return;
+        }
+
         if (message?.action === MESSAGE_ACTIONS.IMMERSIVE_STATE_CHANGED) {
-          applyImmersiveState(Boolean(message.isImmersive));
+          applyImmersiveState(Boolean(message.isImmersive), {
+            flash: Boolean(message.flash ?? message.isImmersive),
+          });
         } else if (message?.action === MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY) {
           toggleHUDVisibility();
         }
