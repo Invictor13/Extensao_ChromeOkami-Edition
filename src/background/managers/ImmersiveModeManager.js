@@ -1,5 +1,6 @@
 import {
   COMMAND_TOGGLE_IMMERSIVE,
+  COMMAND_TOGGLE_HUD_VISIBILITY,
   MESSAGE_ACTIONS,
   STORAGE_KEYS,
 } from '../../shared/constants/index.js';
@@ -246,7 +247,7 @@ export function setupImmersiveModeManager() {
     });
   }
 
-  // 2. Atalho de teclado registrado no manifesto
+  // 2. Atalhos de teclado registrados no manifesto
   if (chrome.commands?.onCommand) {
     chrome.commands.onCommand.addListener(async (command) => {
       try {
@@ -254,6 +255,13 @@ export function setupImmersiveModeManager() {
           const currentWin = await chrome.windows.getCurrent();
           if (currentWin?.id) {
             await toggleImmersiveMode(currentWin.id);
+          }
+        } else if (command === COMMAND_TOGGLE_HUD_VISIBILITY) {
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (activeTab?.id) {
+            await chrome.tabs.sendMessage(activeTab.id, {
+              action: MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY,
+            });
           }
         }
       } catch (err) {

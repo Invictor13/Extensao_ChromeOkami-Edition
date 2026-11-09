@@ -11,11 +11,14 @@
     EXIT_IMMERSIVE: 'OKAMI_EXIT_IMMERSIVE',
     GET_IMMERSIVE_STATE: 'OKAMI_GET_IMMERSIVE_STATE',
     IMMERSIVE_STATE_CHANGED: 'OKAMI_IMMERSIVE_STATE_CHANGED',
+    TOGGLE_HUD_VISIBILITY: 'OKAMI_TOGGLE_HUD_VISIBILITY',
   };
 
   let currentHudInstance = null;
   let currentShadowRoot = null;
   let currentHUDController = null;
+  let pendingImmersiveState = null;
+  let isMessageListenerRegistered = false;
 
   function logInfo(message, ...args) {
     console.log(`[Okami HUD] ${message}`, ...args);
@@ -26,12 +29,23 @@
   }
 
   function applyImmersiveState(isImmersive) {
+    const state = Boolean(isImmersive);
+    pendingImmersiveState = state;
+
     if (currentHudInstance && typeof currentHudInstance.setImmersiveState === 'function') {
-      currentHudInstance.setImmersiveState(isImmersive);
+      currentHudInstance.setImmersiveState(state);
     } else if (currentHUDController && typeof currentHUDController.setImmersiveState === 'function') {
-      currentHUDController.setImmersiveState(isImmersive);
+      currentHUDController.setImmersiveState(state);
     } else if (currentShadowRoot && typeof globalScope.updateHUDImmersiveStateInShadow === 'function') {
-      globalScope.updateHUDImmersiveStateInShadow(currentShadowRoot, isImmersive);
+      globalScope.updateHUDImmersiveStateInShadow(currentShadowRoot, state);
+    }
+  }
+
+  function toggleHUDVisibility() {
+    if (currentHudInstance && typeof currentHudInstance.toggleTopBar === 'function') {
+      currentHudInstance.toggleTopBar();
+    } else if (currentHUDController && typeof currentHUDController.toggleTopBar === 'function') {
+      currentHUDController.toggleTopBar();
     }
   }
 
@@ -56,16 +70,20 @@
 
   function setupMessageListeners() {
     if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
+    if (isMessageListenerRegistered) return;
 
     chrome.runtime.onMessage.addListener((message) => {
       try {
         if (message?.action === MESSAGE_ACTIONS.IMMERSIVE_STATE_CHANGED) {
           applyImmersiveState(Boolean(message.isImmersive));
+        } else if (message?.action === MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY) {
+          toggleHUDVisibility();
         }
       } catch (err) {
         logError('Erro no listener de mensagens do content script:', err);
       }
     });
+    isMessageListenerRegistered = true;
   }
 
   function queryInitialState() {
@@ -119,6 +137,11 @@
       currentHudInstance = hudRoot;
       (document.body || document.documentElement).appendChild(hudRoot);
 
+      // Se havia um estado imersivo recebido antes da injeção ser concluída, aplica imediatamente
+      if (pendingImmersiveState !== null) {
+        applyImmersiveState(pendingImmersiveState);
+      }
+
       logInfo('Okami HUD injetado com sucesso com isolamento Shadow DOM.');
       return hudRoot;
     } catch (err) {
@@ -131,19 +154,39 @@
   globalScope.injectOkamiHUD = injectOkamiHUD;
   globalScope.requestExitImmersiveMode = requestExitImmersiveMode;
   globalScope.applyImmersiveState = applyImmersiveState;
+  globalScope.toggleHUDVisibility = toggleHUDVisibility;
   globalScope.setupMessageListeners = setupMessageListeners;
   globalScope.queryInitialState = queryInitialState;
   globalScope.getCurrentHUDController = () => currentHUDController;
+  globalScope.getPendingImmersiveState = () => pendingImmersiveState;
+  globalScope.resetContentScriptStateForTesting = () => {
+    isMessageListenerRegistered = false;
+    currentHudInstance = null;
+    currentShadowRoot = null;
+    currentHUDController = null;
+    pendingImmersiveState = null;
+  };
 
-  // Inicializa a injeção e comunicação respeitando o estado do DOM
-  if (typeof document !== 'undefined') {
+  function initContentScript() {
     setupMessageListeners();
-    queryInitialState();
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => injectOkamiHUD(), { once: true });
+      document.addEventListener(
+        'DOMContentLoaded',
+        () => {
+          injectOkamiHUD();
+          queryInitialState();
+        },
+        { once: true }
+      );
     } else {
       injectOkamiHUD();
+      queryInitialState();
     }
+  }
+
+  // Inicializa a injeção e comunicação respeitando o ciclo de vida do DOM
+  if (typeof document !== 'undefined') {
+    initContentScript();
   }
 })(typeof globalThis !== 'undefined' ? globalThis : window);

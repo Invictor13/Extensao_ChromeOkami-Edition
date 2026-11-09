@@ -87,4 +87,14 @@ describe('Validação da Arquitetura Nativa e Manifesto (manifest.json)', () => 
     const rawManifest = fs.readFileSync(manifestPath, 'utf8');
     expect(rawManifest).not.toContain('dist/');
   });
+
+  it('deve registrar os comandos de teclado toggle-immersive-mode e toggle-hud-visibility', () => {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    expect(manifest.commands).toBeDefined();
+    expect(manifest.commands['toggle-immersive-mode']).toBeDefined();
+    expect(manifest.commands['toggle-immersive-mode'].suggested_key.default).toBe('Alt+Shift+F');
+
+    expect(manifest.commands['toggle-hud-visibility']).toBeDefined();
+    expect(manifest.commands['toggle-hud-visibility'].suggested_key.default).toBe('Alt+Shift+H');
+  });
 });

@@ -195,4 +195,23 @@ describe('OkamiHUDRoot Custom Element', () => {
     const exitBtn = rightSection.querySelector(`#${OKAMI_HUD_EXIT_BUTTON_ID}`);
     expect(exitBtn).not.toBeNull();
   });
+
+  it('deve alternar a visibilidade da barra com toggleTopBar respeitando o modo imersivo', () => {
+    globalThis.registerOkamiHUDRoot();
+    const element = document.createElement(OKAMI_HUD_CUSTOM_ELEMENT);
+    document.body.appendChild(element);
+
+    // Quando fora do modo imersivo, toggleTopBar não deve abrir a barra
+    element.toggleTopBar();
+    expect(element.isTopBarVisible()).toBe(false);
+
+    // Quando em modo imersivo, deve abrir
+    element.setImmersiveState(true);
+    element.toggleTopBar();
+    expect(element.isTopBarVisible()).toBe(true);
+
+    // Nova chamada fecha a barra imediatamente
+    element.toggleTopBar();
+    expect(element.isTopBarVisible()).toBe(false);
+  });
 });
