@@ -10,6 +10,10 @@
   const OKAMI_HUD_TRIGGER_ZONE_ID = 'okami-hud-top-trigger';
   const OKAMI_HUD_EXIT_BUTTON_ID = 'okami-hud-exit-btn';
   const OKAMI_HUD_TOAST_ID = 'okami-hud-toast-feedback';
+  const OKAMI_HUD_ADDRESS_BAR_ID = 'okami-hud-address-bar';
+  const OKAMI_HUD_ADDRESS_INPUT_ID = 'okami-hud-address-input';
+  const OKAMI_HUD_ADDRESS_CLEAR_ID = 'okami-hud-address-clear';
+  const OKAMI_HUD_ADDRESS_STATUS_ID = 'okami-hud-address-status';
 
   const HUD_AUTOHIDE_DELAY_MS = 380;
   const HUD_INITIAL_REVEAL_DURATION_MS = 1800;
@@ -93,6 +97,40 @@
       );
     }
 
+    hasAddressInput() {
+      return (
+        (typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_ADDRESS_INPUT_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_ADDRESS_INPUT_ID}`)) !== null
+      );
+    }
+
+    getAddressInput() {
+      return (
+        typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_ADDRESS_INPUT_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_ADDRESS_INPUT_ID}`)
+      );
+    }
+
+    setAddressValue(url) {
+      if (this._hudController && typeof this._hudController.setAddressValue === 'function') {
+        this._hudController.setAddressValue(url);
+      }
+    }
+
+    getAddressValue() {
+      return this._hudController && typeof this._hudController.getAddressValue === 'function'
+        ? this._hudController.getAddressValue()
+        : '';
+    }
+
+    setAddressStatus(status, message) {
+      if (this._hudController && typeof this._hudController.setAddressStatus === 'function') {
+        this._hudController.setAddressStatus(status, message);
+      }
+    }
+
     isTopBarVisible() {
       const topBar =
         typeof this._shadowRoot.getElementById === 'function'
@@ -143,7 +181,7 @@
   /**
    * Constrói o elemento da Barra Superior com três regiões distintas:
    * - Esquerda: Identidade visual Okami (insígnia/logo) + espaço para controles futuros.
-   * - Central: Área estrutural reservada para futuras funcionalidades de navegação.
+   * - Central: Barra de Endereço e Navegação Funcional.
    * - Direita: Controles do escopo atual (slot reservado para botão de saída).
    */
   function createTopBarElement() {
@@ -185,15 +223,12 @@
     leftSection.appendChild(brand);
     leftSection.appendChild(leftControlsSlot);
 
-    // 2. Região Central (reservada estruturalmente)
+    // 2. Região Central (Barra de Endereço e Navegação Funcional)
     const centerSection = document.createElement('div');
     centerSection.className = 'okami-bar-section okami-section-center';
 
-    const centerPill = document.createElement('div');
-    centerPill.className = 'okami-center-pill';
-    centerPill.setAttribute('aria-hidden', 'true');
-
-    centerSection.appendChild(centerPill);
+    const addressBar = createAddressBarElement();
+    centerSection.appendChild(addressBar);
 
     // 3. Região Direita
     const rightSection = document.createElement('div');
@@ -209,6 +244,50 @@
     topBar.appendChild(rightSection);
 
     return topBar;
+  }
+
+  /**
+   * Constrói o container da barra de endereço e campo de navegação funcional.
+   */
+  function createAddressBarElement() {
+    const addressBar = document.createElement('div');
+    addressBar.id = OKAMI_HUD_ADDRESS_BAR_ID;
+    addressBar.className = 'okami-address-bar status-idle';
+    addressBar.setAttribute('role', 'search');
+
+    // Ícone / Indicador de status (segurança / pesquisa / carregamento)
+    const statusIcon = document.createElement('span');
+    statusIcon.id = OKAMI_HUD_ADDRESS_STATUS_ID;
+    statusIcon.className = 'okami-address-icon';
+    statusIcon.setAttribute('aria-hidden', 'true');
+    statusIcon.textContent = '🔒';
+
+    // Campo de entrada de texto de endereço / busca
+    const input = document.createElement('input');
+    input.id = OKAMI_HUD_ADDRESS_INPUT_ID;
+    input.className = 'okami-address-input';
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.autocapitalize = 'off';
+    input.spellcheck = false;
+    input.placeholder = 'Pesquisar ou digitar endereço web...';
+    input.setAttribute('aria-label', 'Endereço web ou termo de busca');
+
+    // Botão discreto para limpar conteúdo do campo
+    const clearBtn = document.createElement('button');
+    clearBtn.id = OKAMI_HUD_ADDRESS_CLEAR_ID;
+    clearBtn.className = 'okami-address-clear-btn';
+    clearBtn.type = 'button';
+    clearBtn.tabIndex = -1;
+    clearBtn.title = 'Limpar campo';
+    clearBtn.setAttribute('aria-label', 'Limpar campo de endereço');
+    clearBtn.textContent = '✕';
+
+    addressBar.appendChild(statusIcon);
+    addressBar.appendChild(input);
+    addressBar.appendChild(clearBtn);
+
+    return addressBar;
   }
 
   /**
@@ -341,6 +420,23 @@
     let isHoveringTopBar = false;
     let isHoveringTrigger = false;
 
+    // Controlador da Barra de Endereço
+    const addressBarElem = topBar.querySelector(`#${OKAMI_HUD_ADDRESS_BAR_ID}`);
+    const addressInputElem = topBar.querySelector(`#${OKAMI_HUD_ADDRESS_INPUT_ID}`);
+    const addressClearBtn = topBar.querySelector(`#${OKAMI_HUD_ADDRESS_CLEAR_ID}`);
+    const addressStatusElem = topBar.querySelector(`#${OKAMI_HUD_ADDRESS_STATUS_ID}`);
+
+    let lastCommittedUrl = '';
+    let isAddressInputFocused = false;
+
+    function isAddressInputActive() {
+      if (!addressInputElem) return false;
+      if (isAddressInputFocused) return true;
+      const docActive = typeof document !== 'undefined' ? document.activeElement : null;
+      const shadowActive = shadowRoot ? shadowRoot.activeElement : null;
+      return docActive === addressInputElem || shadowActive === addressInputElem;
+    }
+
     function showTopBar() {
       if (!isImmersive) return;
       if (hideTimer) {
@@ -365,6 +461,10 @@
       }
 
       if (topBar.classList.contains('visible')) {
+        // Se estiver com foco na barra de endereço, fecha o foco e a barra
+        if (isAddressInputActive()) {
+          addressInputElem.blur();
+        }
         hideTopBarImmediately();
       } else {
         showTopBar();
@@ -376,7 +476,8 @@
         clearTimeout(hideTimer);
       }
       hideTimer = setTimeout(() => {
-        if (!isHoveringTopBar && !isHoveringTrigger) {
+        // Não recolhe se o usuário estiver com foco no campo de endereço digitando
+        if (!isHoveringTopBar && !isHoveringTrigger && !isAddressInputActive()) {
           topBar.classList.remove('visible');
         }
         hideTimer = null;
@@ -390,7 +491,7 @@
         clearTimeout(initialRevealTimer);
       }
       initialRevealTimer = setTimeout(() => {
-        if (!isHoveringTopBar && !isHoveringTrigger) {
+        if (!isHoveringTopBar && !isHoveringTrigger && !isAddressInputActive()) {
           scheduleHideTopBar(HUD_AUTOHIDE_DELAY_MS);
         }
         initialRevealTimer = null;
@@ -430,6 +531,10 @@
     // Mantém acessível via teclado dentro do Shadow DOM
     topBar.addEventListener('focusin', () => {
       showTopBar();
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
     });
 
     topBar.addEventListener('focusout', (e) => {
@@ -437,6 +542,129 @@
         scheduleHideTopBar();
       }
     });
+
+    function updateClearButtonVisibility() {
+      if (addressClearBtn && addressInputElem) {
+        if (addressInputElem.value && addressInputElem.value.length > 0) {
+          addressClearBtn.classList.add('visible');
+        } else {
+          addressClearBtn.classList.remove('visible');
+        }
+      }
+    }
+
+    function setAddressStatus(status, message = null) {
+      if (!addressBarElem) return;
+
+      addressBarElem.classList.remove(
+        'status-idle',
+        'status-focused',
+        'status-loading',
+        'status-success',
+        'status-error'
+      );
+      addressBarElem.classList.add(`status-${status}`);
+
+      if (addressStatusElem) {
+        if (status === 'loading') {
+          addressStatusElem.textContent = '◌';
+          addressStatusElem.classList.add('spinning');
+        } else {
+          addressStatusElem.classList.remove('spinning');
+          if (status === 'error') {
+            addressStatusElem.textContent = '⚠';
+          } else if (status === 'success') {
+            addressStatusElem.textContent = '✓';
+          } else {
+            const val = addressInputElem ? addressInputElem.value : '';
+            if (val.startsWith('https://')) {
+              addressStatusElem.textContent = '🔒';
+            } else if (val.startsWith('http://')) {
+              addressStatusElem.textContent = '🔓';
+            } else {
+              addressStatusElem.textContent = '🔍';
+            }
+          }
+        }
+      }
+
+      if (message) {
+        showToastFeedback(shadowRoot, message, 3000);
+      }
+    }
+
+    function setAddressValue(url) {
+      lastCommittedUrl = typeof url === 'string' ? url : '';
+      if (addressInputElem && !isAddressInputActive()) {
+        addressInputElem.value = lastCommittedUrl;
+        updateClearButtonVisibility();
+        setAddressStatus('idle');
+      }
+    }
+
+    function getAddressValue() {
+      return addressInputElem ? addressInputElem.value : '';
+    }
+
+    if (addressInputElem) {
+      addressInputElem.addEventListener('focus', () => {
+        isAddressInputFocused = true;
+        showTopBar();
+        if (hideTimer) {
+          clearTimeout(hideTimer);
+          hideTimer = null;
+        }
+        setAddressStatus('focused');
+        updateClearButtonVisibility();
+        // Seleciona automaticamente o conteúdo ao focar para facilitar substituição
+        setTimeout(() => {
+          try {
+            addressInputElem.select();
+          } catch (_e) {
+            // Suporte parcial
+          }
+        }, 0);
+      });
+
+      addressInputElem.addEventListener('blur', () => {
+        isAddressInputFocused = false;
+        if (!addressInputElem.value) {
+          addressInputElem.value = lastCommittedUrl;
+        }
+        setAddressStatus('idle');
+        updateClearButtonVisibility();
+        scheduleHideTopBar();
+      });
+
+      addressInputElem.addEventListener('input', () => {
+        updateClearButtonVisibility();
+      });
+
+      addressInputElem.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const rawQuery = addressInputElem.value;
+          if (typeof globalScope.requestNavigation === 'function') {
+            globalScope.requestNavigation(rawQuery);
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          addressInputElem.value = lastCommittedUrl;
+          addressInputElem.blur();
+          scheduleHideTopBar();
+        }
+      });
+    }
+
+    if (addressClearBtn && addressInputElem) {
+      addressClearBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        addressInputElem.value = '';
+        updateClearButtonVisibility();
+        addressInputElem.focus();
+      });
+    }
 
     /**
      * Trata movimentos do cursor na viewport.
@@ -452,7 +680,7 @@
       const clientY = typeof e.clientY === 'number' ? e.clientY : -1;
       if (clientY >= 0 && clientY <= 8) {
         showTopBar();
-      } else if (clientY > 48 && !isHoveringTopBar && !isHoveringTrigger) {
+      } else if (clientY > 48 && !isHoveringTopBar && !isHoveringTrigger && !isAddressInputActive()) {
         if (topBar.classList.contains('visible') && !hideTimer) {
           scheduleHideTopBar();
         }
@@ -534,6 +762,11 @@
       setImmersiveState,
       handleGlobalPointerMove,
       isTopBarVisible: () => topBar.classList.contains('visible'),
+      setAddressValue,
+      getAddressValue,
+      setAddressStatus,
+      getAddressInput: () => addressInputElem,
+      getAddressBar: () => addressBarElem,
       get isImmersive() {
         return isImmersive;
       },
@@ -693,25 +926,124 @@
       gap: 8px;
     }
 
-    /* Região Central: Área estrutural reservada */
+    /* Região Central: Barra de Endereço e Navegação Funcional */
     .okami-section-center {
       flex: 1 1 auto;
       justify-content: center;
       min-width: 0;
+      max-width: 640px;
+      margin: 0 auto;
     }
 
-    .okami-center-pill {
-      width: min(420px, 100%);
-      height: 28px;
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      transition: background 0.2s ease, border-color 0.2s ease;
+    .okami-address-bar {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+      height: 32px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      padding: 0 10px;
+      gap: 8px;
+      transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .okami-center-pill:hover {
-      background: rgba(255, 255, 255, 0.06);
-      border-color: rgba(255, 255, 255, 0.1);
+    .okami-address-bar:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .okami-address-bar.status-focused {
+      background: rgba(20, 22, 28, 0.95);
+      border-color: rgba(255, 51, 68, 0.65);
+      box-shadow: 0 0 0 2px rgba(255, 51, 68, 0.25), 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+
+    .okami-address-bar.status-loading {
+      border-color: rgba(64, 150, 255, 0.65);
+      box-shadow: 0 0 0 2px rgba(64, 150, 255, 0.2);
+    }
+
+    .okami-address-bar.status-success {
+      border-color: rgba(46, 204, 113, 0.65);
+      box-shadow: 0 0 0 2px rgba(46, 204, 113, 0.2);
+    }
+
+    .okami-address-bar.status-error {
+      border-color: rgba(255, 51, 68, 0.85);
+      box-shadow: 0 0 0 2px rgba(255, 51, 68, 0.35);
+    }
+
+    .okami-address-icon {
+      flex: 0 0 auto;
+      font-size: 13px;
+      line-height: 1;
+      opacity: 0.75;
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+    }
+
+    .okami-address-icon.spinning {
+      display: inline-block;
+      animation: okami-spin 0.85s linear infinite;
+      color: #4096ff;
+    }
+
+    @keyframes okami-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .okami-address-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #f7f7fa;
+      font-size: 13px;
+      letter-spacing: 0.2px;
+      padding: 0 2px;
+      font-family: inherit;
+    }
+
+    .okami-address-input::placeholder {
+      color: rgba(255, 255, 255, 0.36);
+      font-weight: 400;
+    }
+
+    .okami-address-clear-btn {
+      flex: 0 0 auto;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.12);
+      color: #f0f0f5;
+      font-size: 10px;
+      line-height: 1;
+      cursor: pointer;
+      outline: none;
+      padding: 0;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .okami-address-clear-btn:hover {
+      background: rgba(255, 51, 68, 0.45);
+      color: #ffffff;
+    }
+
+    .okami-address-clear-btn.visible {
+      display: inline-flex;
     }
 
     /* Região Direita: Controles e Botão de Saída */
@@ -894,6 +1226,7 @@
   globalScope.registerOkamiHUDRoot = registerOkamiHUDRoot;
   globalScope.createExitButtonElement = createExitButtonElement;
   globalScope.createTopBarElement = createTopBarElement;
+  globalScope.createAddressBarElement = createAddressBarElement;
   globalScope.createTriggerZoneElement = createTriggerZoneElement;
   globalScope.setupHUDController = setupHUDController;
   globalScope.CONTROLLER_REGISTRY_SYMBOL = CONTROLLER_REGISTRY_SYMBOL;
@@ -902,6 +1235,10 @@
   globalScope.OKAMI_HUD_INDICATOR_ID = OKAMI_HUD_INDICATOR_ID;
   globalScope.OKAMI_HUD_TOP_BAR_ID = OKAMI_HUD_TOP_BAR_ID;
   globalScope.OKAMI_HUD_TRIGGER_ZONE_ID = OKAMI_HUD_TRIGGER_ZONE_ID;
+  globalScope.OKAMI_HUD_ADDRESS_BAR_ID = OKAMI_HUD_ADDRESS_BAR_ID;
+  globalScope.OKAMI_HUD_ADDRESS_INPUT_ID = OKAMI_HUD_ADDRESS_INPUT_ID;
+  globalScope.OKAMI_HUD_ADDRESS_CLEAR_ID = OKAMI_HUD_ADDRESS_CLEAR_ID;
+  globalScope.OKAMI_HUD_ADDRESS_STATUS_ID = OKAMI_HUD_ADDRESS_STATUS_ID;
   globalScope.OKAMI_HUD_EXIT_BUTTON_ID = OKAMI_HUD_EXIT_BUTTON_ID;
   globalScope.OKAMI_HUD_TOAST_ID = OKAMI_HUD_TOAST_ID;
   globalScope.HUD_AUTOHIDE_DELAY_MS = HUD_AUTOHIDE_DELAY_MS;

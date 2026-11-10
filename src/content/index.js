@@ -19,6 +19,8 @@
     IMMERSIVE_STATE_CHANGED: 'OKAMI_IMMERSIVE_STATE_CHANGED',
     TOGGLE_HUD_VISIBILITY: 'OKAMI_TOGGLE_HUD_VISIBILITY',
     PING: 'OKAMI_PING',
+    NAVIGATE_TAB: 'OKAMI_NAVIGATE_TAB',
+    TAB_NAVIGATED: 'OKAMI_TAB_NAVIGATED',
   };
 
   const READINESS_STATUS = {
@@ -36,6 +38,7 @@
     hudController: null,
     pendingImmersiveState: null,
     lastError: null,
+    isNavigationHookAttached: false,
   };
   globalScope[RUNTIME_STATE_SYMBOL] = runtimeState;
 
@@ -107,6 +110,136 @@
     }
   }
 
+  function syncCurrentUrl() {
+    try {
+      const currentUrl =
+        typeof window !== 'undefined' && window.location ? window.location.href : '';
+      if (!currentUrl) return;
+
+      const controller = getActiveController();
+      if (controller && typeof controller.setAddressValue === 'function') {
+        controller.setAddressValue(currentUrl);
+        return;
+      }
+
+      if (runtimeState.hudInstance && typeof runtimeState.hudInstance.setAddressValue === 'function') {
+        runtimeState.hudInstance.setAddressValue(currentUrl);
+      }
+    } catch (_err) {
+      // Falha silenciosa de leitura de location
+    }
+  }
+
+  function requestNavigation(rawQuery) {
+    if (!rawQuery || typeof rawQuery !== 'string' || !rawQuery.trim()) {
+      return;
+    }
+
+    const trimmed = rawQuery.trim();
+    const controller = getActiveController();
+
+    // Bloqueio imediato de protocolos potencialmente perigosos no content script
+    const lower = trimmed.toLowerCase();
+    const dangerousProtocols = [
+      'javascript:',
+      'data:',
+      'file:',
+      'chrome:',
+      'chrome-extension:',
+      'devtools:',
+      'view-source:',
+      'about:',
+    ];
+    for (const proto of dangerousProtocols) {
+      if (lower.startsWith(proto)) {
+        if (controller && typeof controller.setAddressStatus === 'function') {
+          controller.setAddressStatus('error', `Protocolo não permitido: ${proto}`);
+        }
+        return;
+      }
+    }
+
+    if (controller && typeof controller.setAddressStatus === 'function') {
+      controller.setAddressStatus('loading');
+    }
+
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage(
+          {
+            action: MESSAGE_ACTIONS.NAVIGATE_TAB,
+            query: trimmed,
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              const err = chrome.runtime.lastError.message || 'Falha de comunicação';
+              logError('Falha ao enviar solicitação de navegação:', chrome.runtime.lastError);
+              if (controller && typeof controller.setAddressStatus === 'function') {
+                controller.setAddressStatus('error', err);
+              }
+            } else if (!response || response.success === false) {
+              const err = response?.error || 'Não foi possível navegar';
+              logError('Navegação rejeitada:', err);
+              if (controller && typeof controller.setAddressStatus === 'function') {
+                controller.setAddressStatus('error', err);
+              }
+            } else {
+              // Navegação disparada com sucesso no Background
+              if (controller && typeof controller.setAddressStatus === 'function') {
+                controller.setAddressStatus('success');
+              }
+            }
+          }
+        );
+      }
+    } catch (err) {
+      logError('Falha ao despachar mensagem de navegação:', err);
+      if (controller && typeof controller.setAddressStatus === 'function') {
+        controller.setAddressStatus('error', 'Erro interno de envio');
+      }
+    }
+  }
+
+  function setupHistoryAndNavigationSync() {
+    if (runtimeState.isNavigationHookAttached) return;
+    if (typeof window === 'undefined') return;
+
+    // 1. Escuta eventos padrão de navegação SPA / histórico
+    window.addEventListener('popstate', () => syncCurrentUrl(), { passive: true });
+    window.addEventListener('hashchange', () => syncCurrentUrl(), { passive: true });
+
+    // 2. Intercepta history.pushState e history.replaceState para detecção instantânea em SPAs
+    if (typeof window.history !== 'undefined') {
+      const originalPushState = window.history.pushState;
+      if (typeof originalPushState === 'function') {
+        window.history.pushState = function (...args) {
+          const ret = originalPushState.apply(this, args);
+          try {
+            syncCurrentUrl();
+          } catch (_e) {
+            // Silencioso
+          }
+          return ret;
+        };
+      }
+
+      const originalReplaceState = window.history.replaceState;
+      if (typeof originalReplaceState === 'function') {
+        window.history.replaceState = function (...args) {
+          const ret = originalReplaceState.apply(this, args);
+          try {
+            syncCurrentUrl();
+          } catch (_e) {
+            // Silencioso
+          }
+          return ret;
+        };
+      }
+    }
+
+    runtimeState.isNavigationHookAttached = true;
+  }
+
   function requestExitImmersiveMode() {
     try {
       if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
@@ -169,6 +302,8 @@
           applyImmersiveState(Boolean(message.isImmersive), {
             flash: Boolean(message.flash ?? message.isImmersive),
           });
+        } else if (message?.action === MESSAGE_ACTIONS.TAB_NAVIGATED) {
+          syncCurrentUrl();
         } else if (message?.action === MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY) {
           toggleHUDVisibility();
         }
@@ -280,6 +415,9 @@
         applyImmersiveState(runtimeState.pendingImmersiveState);
       }
 
+      // Sincroniza o endereço atual da aba na barra de endereço
+      syncCurrentUrl();
+
       logInfo('Okami HUD injetado com sucesso com isolamento Shadow DOM e prontidão confirmada.');
       return hudRoot;
     } catch (err) {
@@ -293,6 +431,8 @@
   // Exporta para escopo global para consumo por testes ou scripts
   globalScope.injectOkamiHUD = injectOkamiHUD;
   globalScope.requestExitImmersiveMode = requestExitImmersiveMode;
+  globalScope.requestNavigation = requestNavigation;
+  globalScope.syncCurrentUrl = syncCurrentUrl;
   globalScope.applyImmersiveState = applyImmersiveState;
   globalScope.toggleHUDVisibility = toggleHUDVisibility;
   globalScope.setupMessageListeners = setupMessageListeners;
@@ -313,10 +453,12 @@
     runtimeState.hudController = null;
     runtimeState.pendingImmersiveState = null;
     runtimeState.lastError = null;
+    runtimeState.isNavigationHookAttached = false;
   };
 
   function initContentScript() {
     setupMessageListeners();
+    setupHistoryAndNavigationSync();
 
     if (document.readyState === 'loading') {
       document.addEventListener(
@@ -324,12 +466,14 @@
         () => {
           injectOkamiHUD();
           queryInitialState();
+          syncCurrentUrl();
         },
         { once: true }
       );
     } else {
       injectOkamiHUD();
       queryInitialState();
+      syncCurrentUrl();
     }
   }
 
