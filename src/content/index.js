@@ -18,6 +18,9 @@
     GET_IMMERSIVE_STATE: 'OKAMI_GET_IMMERSIVE_STATE',
     IMMERSIVE_STATE_CHANGED: 'OKAMI_IMMERSIVE_STATE_CHANGED',
     TOGGLE_HUD_VISIBILITY: 'OKAMI_TOGGLE_HUD_VISIBILITY',
+    TOGGLE_LEFT_PANEL: 'OKAMI_TOGGLE_LEFT_PANEL',
+    TOGGLE_RIGHT_PANEL: 'OKAMI_TOGGLE_RIGHT_PANEL',
+    CLOSE_PANELS: 'OKAMI_CLOSE_PANELS',
     PING: 'OKAMI_PING',
     NAVIGATE_TAB: 'OKAMI_NAVIGATE_TAB',
     TAB_NAVIGATED: 'OKAMI_TAB_NAVIGATED',
@@ -39,6 +42,7 @@
     pendingImmersiveState: null,
     lastError: null,
     isNavigationHookAttached: false,
+    isKeyboardListenerAttached: false,
   };
   globalScope[RUNTIME_STATE_SYMBOL] = runtimeState;
 
@@ -101,13 +105,124 @@
   function toggleHUDVisibility() {
     const controller = getActiveController();
     if (controller && typeof controller.toggleTopBar === 'function') {
-      controller.toggleTopBar();
-      return;
+      return controller.toggleTopBar();
     }
 
     if (runtimeState.hudInstance && typeof runtimeState.hudInstance.toggleTopBar === 'function') {
-      runtimeState.hudInstance.toggleTopBar();
+      return runtimeState.hudInstance.toggleTopBar();
     }
+  }
+
+  function toggleLeftPanel() {
+    const controller = getActiveController();
+    if (controller && typeof controller.toggleLeftPanel === 'function') {
+      return controller.toggleLeftPanel();
+    }
+
+    if (runtimeState.hudInstance && typeof runtimeState.hudInstance.toggleLeftPanel === 'function') {
+      return runtimeState.hudInstance.toggleLeftPanel();
+    }
+  }
+
+  function toggleRightPanel() {
+    const controller = getActiveController();
+    if (controller && typeof controller.toggleRightPanel === 'function') {
+      return controller.toggleRightPanel();
+    }
+
+    if (runtimeState.hudInstance && typeof runtimeState.hudInstance.toggleRightPanel === 'function') {
+      return runtimeState.hudInstance.toggleRightPanel();
+    }
+  }
+
+  function closePanels() {
+    const controller = getActiveController();
+    if (controller && typeof controller.closeAllPanels === 'function') {
+      controller.closeAllPanels();
+      return;
+    }
+
+    if (runtimeState.hudInstance && typeof runtimeState.hudInstance.closeAllPanels === 'function') {
+      runtimeState.hudInstance.closeAllPanels();
+    }
+  }
+
+  function handleEscKey() {
+    const controller = getActiveController();
+    if (controller && typeof controller.closeActivePanelOrHierarchy === 'function') {
+      return controller.closeActivePanelOrHierarchy();
+    }
+
+    if (runtimeState.hudInstance && typeof runtimeState.hudInstance.closeActivePanelOrHierarchy === 'function') {
+      return runtimeState.hudInstance.closeActivePanelOrHierarchy();
+    }
+    return false;
+  }
+
+  function isEditableElement(element) {
+    if (!element) return false;
+    const tagName = element.tagName ? element.tagName.toUpperCase() : '';
+    if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
+      // Exceção intencional: inputs que fazem parte do próprio Okami HUD Shadow DOM
+      const shadowRoot = runtimeState.shadowRoot || runtimeState.hudInstance?.[SHADOW_ROOT_REGISTRY_SYMBOL];
+      if (shadowRoot && shadowRoot.contains(element)) {
+        return false;
+      }
+      return true;
+    }
+    if (element.isContentEditable || element.getAttribute?.('contenteditable') === 'true') {
+      return true;
+    }
+    return false;
+  }
+
+  function setupKeyboardShortcuts() {
+    if (runtimeState.isKeyboardListenerAttached) return;
+    if (typeof window === 'undefined') return;
+
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        // Se a tecla pressionada for Escape
+        if (event.key === 'Escape' || event.keyCode === 27) {
+          // Não intercepta se o usuário estiver focado em um input da página hospedeira (salvo se nada na página estiver usando)
+          const target = event.target;
+          if (isEditableElement(target)) {
+            return;
+          }
+
+          const handled = handleEscKey();
+          if (handled) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          return;
+        }
+
+        // Atalhos com Alt+Shift
+        if (event.altKey && event.shiftKey) {
+          const key = (event.key || '').toUpperCase();
+
+          // Não intercepta se usuário estiver digitando em campo de texto da página
+          if (isEditableElement(event.target)) {
+            return;
+          }
+
+          if (key === 'L') {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleLeftPanel();
+          } else if (key === 'R') {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleRightPanel();
+          }
+        }
+      },
+      { capture: true }
+    );
+
+    runtimeState.isKeyboardListenerAttached = true;
   }
 
   function syncCurrentUrl() {
@@ -306,6 +421,12 @@
           syncCurrentUrl();
         } else if (message?.action === MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY) {
           toggleHUDVisibility();
+        } else if (message?.action === MESSAGE_ACTIONS.TOGGLE_LEFT_PANEL) {
+          toggleLeftPanel();
+        } else if (message?.action === MESSAGE_ACTIONS.TOGGLE_RIGHT_PANEL) {
+          toggleRightPanel();
+        } else if (message?.action === MESSAGE_ACTIONS.CLOSE_PANELS) {
+          closePanels();
         }
       } catch (err) {
         logError('Erro no listener de mensagens do content script:', err);
@@ -435,6 +556,12 @@
   globalScope.syncCurrentUrl = syncCurrentUrl;
   globalScope.applyImmersiveState = applyImmersiveState;
   globalScope.toggleHUDVisibility = toggleHUDVisibility;
+  globalScope.toggleLeftPanel = toggleLeftPanel;
+  globalScope.toggleRightPanel = toggleRightPanel;
+  globalScope.closePanels = closePanels;
+  globalScope.handleEscKey = handleEscKey;
+  globalScope.isEditableElement = isEditableElement;
+  globalScope.setupKeyboardShortcuts = setupKeyboardShortcuts;
   globalScope.setupMessageListeners = setupMessageListeners;
   globalScope.queryInitialState = queryInitialState;
   globalScope.buildReadinessContract = buildReadinessContract;
@@ -454,10 +581,12 @@
     runtimeState.pendingImmersiveState = null;
     runtimeState.lastError = null;
     runtimeState.isNavigationHookAttached = false;
+    runtimeState.isKeyboardListenerAttached = false;
   };
 
   function initContentScript() {
     setupMessageListeners();
+    setupKeyboardShortcuts();
     setupHistoryAndNavigationSync();
 
     if (document.readyState === 'loading') {

@@ -14,9 +14,14 @@
   const OKAMI_HUD_ADDRESS_INPUT_ID = 'okami-hud-address-input';
   const OKAMI_HUD_ADDRESS_CLEAR_ID = 'okami-hud-address-clear';
   const OKAMI_HUD_ADDRESS_STATUS_ID = 'okami-hud-address-status';
+  const OKAMI_HUD_LEFT_PANEL_ID = 'okami-hud-left-panel';
+  const OKAMI_HUD_RIGHT_PANEL_ID = 'okami-hud-right-panel';
+  const OKAMI_HUD_LEFT_PANEL_TRIGGER_ID = 'okami-hud-left-panel-trigger';
+  const OKAMI_HUD_RIGHT_PANEL_TRIGGER_ID = 'okami-hud-right-panel-trigger';
 
   const HUD_AUTOHIDE_DELAY_MS = 380;
   const HUD_INITIAL_REVEAL_DURATION_MS = 1800;
+  const HUD_PANEL_WIDTH_PX = 320;
 
   // Chave de registro privado compartilhada no mundo isolado do content script
   const CONTROLLER_REGISTRY_SYMBOL = Symbol.for('okami.hud.controller');
@@ -70,6 +75,57 @@
       }
     }
 
+    toggleLeftPanel() {
+      if (this._hudController && typeof this._hudController.toggleLeftPanel === 'function') {
+        return this._hudController.toggleLeftPanel();
+      }
+    }
+
+    toggleRightPanel() {
+      if (this._hudController && typeof this._hudController.toggleRightPanel === 'function') {
+        return this._hudController.toggleRightPanel();
+      }
+    }
+
+    openLeftPanel() {
+      if (this._hudController && typeof this._hudController.openLeftPanel === 'function') {
+        this._hudController.openLeftPanel();
+      }
+    }
+
+    closeLeftPanel() {
+      if (this._hudController && typeof this._hudController.closeLeftPanel === 'function') {
+        this._hudController.closeLeftPanel();
+      }
+    }
+
+    openRightPanel() {
+      if (this._hudController && typeof this._hudController.openRightPanel === 'function') {
+        this._hudController.openRightPanel();
+      }
+    }
+
+    closeRightPanel() {
+      if (this._hudController && typeof this._hudController.closeRightPanel === 'function') {
+        this._hudController.closeRightPanel();
+      }
+    }
+
+    closeActivePanelOrHierarchy() {
+      if (this._hudController && typeof this._hudController.closeActivePanelOrHierarchy === 'function') {
+        return this._hudController.closeActivePanelOrHierarchy();
+      }
+      return false;
+    }
+
+    isLeftPanelOpen() {
+      return Boolean(this._hudController && typeof this._hudController.isLeftPanelOpen === 'function' && this._hudController.isLeftPanelOpen());
+    }
+
+    isRightPanelOpen() {
+      return Boolean(this._hudController && typeof this._hudController.isRightPanelOpen === 'function' && this._hudController.isRightPanelOpen());
+    }
+
     /**
      * Métodos auxiliares para testes unitários ou inspeção interna.
      */
@@ -102,6 +158,38 @@
         (typeof this._shadowRoot.getElementById === 'function'
           ? this._shadowRoot.getElementById(OKAMI_HUD_ADDRESS_INPUT_ID)
           : this._shadowRoot.querySelector(`#${OKAMI_HUD_ADDRESS_INPUT_ID}`)) !== null
+      );
+    }
+
+    hasLeftPanel() {
+      return (
+        (typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_LEFT_PANEL_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_LEFT_PANEL_ID}`)) !== null
+      );
+    }
+
+    hasRightPanel() {
+      return (
+        (typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_RIGHT_PANEL_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_RIGHT_PANEL_ID}`)) !== null
+      );
+    }
+
+    getLeftPanel() {
+      return (
+        typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_LEFT_PANEL_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_LEFT_PANEL_ID}`)
+      );
+    }
+
+    getRightPanel() {
+      return (
+        typeof this._shadowRoot.getElementById === 'function'
+          ? this._shadowRoot.getElementById(OKAMI_HUD_RIGHT_PANEL_ID)
+          : this._shadowRoot.querySelector(`#${OKAMI_HUD_RIGHT_PANEL_ID}`)
       );
     }
 
@@ -179,10 +267,128 @@
   }
 
   /**
+   * Constrói botão de acionamento de painel lateral no HUD.
+   */
+  function createPanelTriggerButton(id, title, ariaLabel, iconText, side) {
+    const btn = document.createElement('button');
+    btn.id = id;
+    btn.className = `okami-panel-trigger-btn okami-trigger-${side}`;
+    btn.type = 'button';
+    btn.title = title;
+    btn.setAttribute('aria-label', ariaLabel);
+    btn.setAttribute('aria-expanded', 'false');
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'okami-trigger-icon';
+    iconSpan.textContent = iconText;
+    iconSpan.setAttribute('aria-hidden', 'true');
+
+    btn.appendChild(iconSpan);
+    return btn;
+  }
+
+  /**
+   * Constrói a estrutura visual de um painel lateral (esquerdo ou direito).
+   */
+  function createSidePanelElement(id, side, titleText, badgeText, shortcutText) {
+    const panel = document.createElement('aside');
+    panel.id = id;
+    panel.className = `okami-side-panel okami-panel-${side}`;
+    panel.setAttribute('role', 'region');
+    panel.setAttribute('aria-label', titleText);
+    panel.setAttribute('aria-hidden', 'true');
+
+    // Header do painel
+    const header = document.createElement('div');
+    header.className = 'okami-panel-header';
+
+    const headerLeft = document.createElement('div');
+    headerLeft.className = 'okami-panel-header-title-box';
+
+    const icon = document.createElement('span');
+    icon.className = 'okami-panel-icon';
+    icon.textContent = side === 'left' ? '◧' : '◨';
+    icon.setAttribute('aria-hidden', 'true');
+
+    const title = document.createElement('h2');
+    title.className = 'okami-panel-title';
+    title.textContent = titleText;
+
+    const badge = document.createElement('span');
+    badge.className = 'okami-panel-badge';
+    badge.textContent = badgeText;
+
+    headerLeft.appendChild(icon);
+    headerLeft.appendChild(title);
+    headerLeft.appendChild(badge);
+
+    const headerRight = document.createElement('div');
+    headerRight.className = 'okami-panel-header-actions';
+
+    const shortcutHint = document.createElement('span');
+    shortcutHint.className = 'okami-panel-shortcut-hint';
+    shortcutHint.textContent = shortcutText;
+    shortcutHint.title = `Atalho: ${shortcutText}`;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = `okami-panel-close-btn okami-close-${side}`;
+    closeBtn.type = 'button';
+    closeBtn.title = `Fechar ${titleText} (Esc)`;
+    closeBtn.setAttribute('aria-label', `Fechar ${titleText}`);
+
+    const closeIcon = document.createElement('span');
+    closeIcon.textContent = '✕';
+    closeIcon.setAttribute('aria-hidden', 'true');
+    closeBtn.appendChild(closeIcon);
+
+    headerRight.appendChild(shortcutHint);
+    headerRight.appendChild(closeBtn);
+
+    header.appendChild(headerLeft);
+    header.appendChild(headerRight);
+
+    // Conteúdo / Corpo do painel (preparado para futuras funcionalidades)
+    const body = document.createElement('div');
+    body.className = 'okami-panel-body';
+
+    const placeholder = document.createElement('div');
+    placeholder.className = 'okami-panel-placeholder';
+
+    const placeholderIcon = document.createElement('div');
+    placeholderIcon.className = 'okami-panel-placeholder-icon';
+    placeholderIcon.textContent = '◈';
+    placeholderIcon.setAttribute('aria-hidden', 'true');
+
+    const placeholderText = document.createElement('p');
+    placeholderText.className = 'okami-panel-placeholder-text';
+    placeholderText.textContent = `Área interna do ${titleText} pronta para receber módulos futuros.`;
+
+    placeholder.appendChild(placeholderIcon);
+    placeholder.appendChild(placeholderText);
+    body.appendChild(placeholder);
+
+    // Footer opcional com status / instrução
+    const footer = document.createElement('div');
+    footer.className = 'okami-panel-footer';
+
+    const footerText = document.createElement('span');
+    footerText.className = 'okami-panel-footer-text';
+    footerText.textContent = 'Okami HUD • Pressione Esc para fechar';
+
+    footer.appendChild(footerText);
+
+    panel.appendChild(header);
+    panel.appendChild(body);
+    panel.appendChild(footer);
+
+    return panel;
+  }
+
+  /**
    * Constrói o elemento da Barra Superior com três regiões distintas:
-   * - Esquerda: Identidade visual Okami (insígnia/logo) + espaço para controles futuros.
+   * - Esquerda: Identidade visual Okami + botão do painel esquerdo.
    * - Central: Barra de Endereço e Navegação Funcional.
-   * - Direita: Controles do escopo atual (slot reservado para botão de saída).
+   * - Direita: Botão do painel direito + botão de saída.
    */
   function createTopBarElement() {
     const topBar = document.createElement('header');
@@ -194,6 +400,14 @@
     // 1. Região Esquerda
     const leftSection = document.createElement('div');
     leftSection.className = 'okami-bar-section okami-section-left';
+
+    const leftTriggerBtn = createPanelTriggerButton(
+      OKAMI_HUD_LEFT_PANEL_TRIGGER_ID,
+      'Painel Lateral Esquerdo (Alt+Shift+L)',
+      'Alternar Painel Esquerdo',
+      '◧',
+      'left'
+    );
 
     const brand = document.createElement('div');
     brand.className = 'okami-brand';
@@ -218,7 +432,7 @@
 
     const leftControlsSlot = document.createElement('div');
     leftControlsSlot.className = 'okami-slot okami-slot-left';
-    leftControlsSlot.setAttribute('aria-hidden', 'true');
+    leftControlsSlot.appendChild(leftTriggerBtn);
 
     leftSection.appendChild(brand);
     leftSection.appendChild(leftControlsSlot);
@@ -234,8 +448,17 @@
     const rightSection = document.createElement('div');
     rightSection.className = 'okami-bar-section okami-section-right';
 
+    const rightTriggerBtn = createPanelTriggerButton(
+      OKAMI_HUD_RIGHT_PANEL_TRIGGER_ID,
+      'Painel Lateral Direito (Alt+Shift+R)',
+      'Alternar Painel Direito',
+      '◨',
+      'right'
+    );
+
     const rightControlsSlot = document.createElement('div');
     rightControlsSlot.className = 'okami-slot okami-slot-right';
+    rightControlsSlot.appendChild(rightTriggerBtn);
 
     rightSection.appendChild(rightControlsSlot);
 
@@ -411,14 +634,26 @@
   }
 
   /**
-   * Controlador e orquestrador de eventos da barra superior no Shadow DOM.
+   * Controlador e orquestrador de eventos da barra superior e painéis no Shadow DOM.
    */
-  function setupHUDController(shadowRoot, topBar, triggerZone, initialImmersive = false) {
+  function setupHUDController(shadowRoot, topBar, triggerZone, leftPanel, rightPanel, initialImmersive = false) {
     let isImmersive = Boolean(initialImmersive);
     let hideTimer = null;
     let initialRevealTimer = null;
     let isHoveringTopBar = false;
     let isHoveringTrigger = false;
+
+    // Estado dos Painéis Laterais
+    let isLeftOpen = false;
+    let isRightOpen = false;
+    // Histórico de foco/ordem para LIFO no fechamento por Esc
+    const panelStack = [];
+
+    // Elementos de gatilho e fechamento
+    const leftTriggerBtn = topBar.querySelector(`#${OKAMI_HUD_LEFT_PANEL_TRIGGER_ID}`);
+    const rightTriggerBtn = topBar.querySelector(`#${OKAMI_HUD_RIGHT_PANEL_TRIGGER_ID}`);
+    const leftCloseBtn = leftPanel ? leftPanel.querySelector('.okami-panel-close-btn') : null;
+    const rightCloseBtn = rightPanel ? rightPanel.querySelector('.okami-panel-close-btn') : null;
 
     // Controlador da Barra de Endereço
     const addressBarElem = topBar.querySelector(`#${OKAMI_HUD_ADDRESS_BAR_ID}`);
@@ -435,6 +670,179 @@
       const docActive = typeof document !== 'undefined' ? document.activeElement : null;
       const shadowActive = shadowRoot ? shadowRoot.activeElement : null;
       return docActive === addressInputElem || shadowActive === addressInputElem;
+    }
+
+    function updatePanelTriggerState(btn, isOpen) {
+      if (!btn) return;
+      btn.setAttribute('aria-expanded', String(isOpen));
+      if (isOpen) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    }
+
+    function openLeftPanel() {
+      if (!isImmersive) {
+        showToastFeedback(shadowRoot, 'Painel disponível no modo imersivo (Alt+Shift+F)');
+        return;
+      }
+      if (!leftPanel) return;
+      isLeftOpen = true;
+      leftPanel.classList.add('open');
+      leftPanel.setAttribute('aria-hidden', 'false');
+      updatePanelTriggerState(leftTriggerBtn, true);
+
+      // Garante que o painel esquerdo esteja no topo da pilha LIFO
+      const idx = panelStack.indexOf('left');
+      if (idx !== -1) panelStack.splice(idx, 1);
+      panelStack.push('left');
+    }
+
+    function closeLeftPanel() {
+      if (!leftPanel) return;
+      isLeftOpen = false;
+      leftPanel.classList.remove('open');
+      leftPanel.setAttribute('aria-hidden', 'true');
+      updatePanelTriggerState(leftTriggerBtn, false);
+
+      const idx = panelStack.indexOf('left');
+      if (idx !== -1) panelStack.splice(idx, 1);
+    }
+
+    function toggleLeftPanel() {
+      if (isLeftOpen) {
+        closeLeftPanel();
+        return false;
+      } else {
+        openLeftPanel();
+        return true;
+      }
+    }
+
+    function openRightPanel() {
+      if (!isImmersive) {
+        showToastFeedback(shadowRoot, 'Painel disponível no modo imersivo (Alt+Shift+F)');
+        return;
+      }
+      if (!rightPanel) return;
+      isRightOpen = true;
+      rightPanel.classList.add('open');
+      rightPanel.setAttribute('aria-hidden', 'false');
+      updatePanelTriggerState(rightTriggerBtn, true);
+
+      // Garante que o painel direito esteja no topo da pilha LIFO
+      const idx = panelStack.indexOf('right');
+      if (idx !== -1) panelStack.splice(idx, 1);
+      panelStack.push('right');
+    }
+
+    function closeRightPanel() {
+      if (!rightPanel) return;
+      isRightOpen = false;
+      rightPanel.classList.remove('open');
+      rightPanel.setAttribute('aria-hidden', 'true');
+      updatePanelTriggerState(rightTriggerBtn, false);
+
+      const idx = panelStack.indexOf('right');
+      if (idx !== -1) panelStack.splice(idx, 1);
+    }
+
+    function toggleRightPanel() {
+      if (isRightOpen) {
+        closeRightPanel();
+        return false;
+      } else {
+        openRightPanel();
+        return true;
+      }
+    }
+
+    function closeAllPanels() {
+      closeLeftPanel();
+      closeRightPanel();
+      panelStack.length = 0;
+    }
+
+    /**
+     * Fecha o elemento de maior prioridade na hierarquia quando Esc é acionado:
+     * 1. Foco no campo de endereço -> restaura valor e sai do foco.
+     * 2. Painel mais recentemente ativado (LIFO na panelStack).
+     * 3. Barra superior aberta -> fecha a barra.
+     * Retorna true se consumiu o evento de Esc, false caso nada estivesse aberto.
+     */
+    function closeActivePanelOrHierarchy() {
+      if (isAddressInputActive()) {
+        if (addressInputElem) {
+          addressInputElem.value = lastCommittedUrl;
+          addressInputElem.blur();
+        }
+        scheduleHideTopBar(0);
+        return true;
+      }
+
+      if (panelStack.length > 0) {
+        const top = panelStack[panelStack.length - 1];
+        if (top === 'right') {
+          closeRightPanel();
+          return true;
+        } else if (top === 'left') {
+          closeLeftPanel();
+          return true;
+        }
+      }
+
+      // Se nenhum painel estava na pilha mas algum estiver aberto
+      if (isRightOpen) {
+        closeRightPanel();
+        return true;
+      }
+      if (isLeftOpen) {
+        closeLeftPanel();
+        return true;
+      }
+
+      // Se a barra superior estiver visível, recolhe imediatamente
+      if (topBar.classList.contains('visible')) {
+        hideTopBarImmediately();
+        return true;
+      }
+
+      return false;
+    }
+
+    // Vincula eventos nos botões de gatilho do topo
+    if (leftTriggerBtn) {
+      leftTriggerBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleLeftPanel();
+      });
+    }
+
+    if (rightTriggerBtn) {
+      rightTriggerBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleRightPanel();
+      });
+    }
+
+    // Vincula eventos nos botões de fechar dos painéis
+    if (leftCloseBtn) {
+      leftCloseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeLeftPanel();
+      });
+    }
+
+    if (rightCloseBtn) {
+      rightCloseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeRightPanel();
+      });
     }
 
     function showTopBar() {
@@ -740,6 +1148,7 @@
       } else {
         detachEdgeTracking();
         hideTopBarImmediately();
+        closeAllPanels();
         isHoveringTopBar = false;
         isHoveringTrigger = false;
         if (initialRevealTimer) {
@@ -767,12 +1176,24 @@
       setAddressStatus,
       getAddressInput: () => addressInputElem,
       getAddressBar: () => addressBarElem,
+      // Métodos de controle dos painéis
+      toggleLeftPanel,
+      toggleRightPanel,
+      openLeftPanel,
+      closeLeftPanel,
+      openRightPanel,
+      closeRightPanel,
+      closeAllPanels,
+      closeActivePanelOrHierarchy,
+      isLeftPanelOpen: () => isLeftOpen,
+      isRightPanelOpen: () => isRightOpen,
       get isImmersive() {
         return isImmersive;
       },
       destroy() {
         detachEdgeTracking();
         hideTopBarImmediately();
+        closeAllPanels();
         if (initialRevealTimer) {
           clearTimeout(initialRevealTimer);
           initialRevealTimer = null;
@@ -1104,6 +1525,228 @@
       letter-spacing: 0.2px;
     }
 
+    /* Botões de gatilho dos painéis no HUD */
+    .okami-panel-trigger-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.07);
+      color: #b0b4c3;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      outline: none;
+      font-size: 14px;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      padding: 0;
+    }
+
+    .okami-panel-trigger-btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .okami-panel-trigger-btn.active {
+      background: rgba(255, 51, 68, 0.22);
+      color: #ff3344;
+      border-color: rgba(255, 51, 68, 0.55);
+      box-shadow: 0 0 10px rgba(255, 51, 68, 0.3);
+    }
+
+    .okami-panel-trigger-btn:focus-visible {
+      border-color: #ff3344;
+      box-shadow: 0 0 0 2px rgba(255, 51, 68, 0.4);
+    }
+
+    /* Painéis Laterais Esquerdo e Direito */
+    .okami-side-panel {
+      position: absolute;
+      top: 48px;
+      bottom: 0;
+      width: 320px;
+      max-width: 90vw;
+      background: rgba(13, 14, 18, 0.94);
+      backdrop-filter: blur(24px) saturate(160%);
+      -webkit-backdrop-filter: blur(24px) saturate(160%);
+      color: #f3f4f8;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+      user-select: none;
+      pointer-events: none; /* Não bloqueia cliques na página enquanto fechado */
+      visibility: hidden;
+      opacity: 0;
+      transition:
+        transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 0.22s ease-out,
+        visibility 0.28s;
+      z-index: 2147483645;
+    }
+
+    /* Painel Esquerdo */
+    .okami-panel-left {
+      left: 0;
+      border-right: 1px solid rgba(255, 255, 255, 0.10);
+      transform: translateX(-100%);
+    }
+
+    .okami-panel-left.open {
+      transform: translateX(0);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto; /* Permite interação apenas quando aberto */
+    }
+
+    /* Painel Direito */
+    .okami-panel-right {
+      right: 0;
+      border-left: 1px solid rgba(255, 255, 255, 0.10);
+      transform: translateX(100%);
+    }
+
+    .okami-panel-right.open {
+      transform: translateX(0);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto; /* Permite interação apenas quando aberto */
+    }
+
+    /* Estrutura interna dos painéis laterais */
+    .okami-panel-header {
+      flex: 0 0 auto;
+      height: 48px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .okami-panel-header-title-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .okami-panel-icon {
+      font-size: 15px;
+      color: #ff3344;
+      line-height: 1;
+    }
+
+    .okami-panel-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      margin: 0;
+      color: #ffffff;
+      text-transform: uppercase;
+    }
+
+    .okami-panel-badge {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #a4a8b7;
+      letter-spacing: 0.4px;
+    }
+
+    .okami-panel-header-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .okami-panel-shortcut-hint {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #8c909f;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: monospace;
+    }
+
+    .okami-panel-close-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.07);
+      color: #b0b4c3;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      outline: none;
+      font-size: 11px;
+      line-height: 1;
+      transition: all 0.16s ease;
+      padding: 0;
+    }
+
+    .okami-panel-close-btn:hover {
+      background: rgba(255, 51, 68, 0.35);
+      color: #ffffff;
+      border-color: rgba(255, 51, 68, 0.6);
+    }
+
+    .okami-panel-close-btn:focus-visible {
+      border-color: #ff3344;
+      box-shadow: 0 0 0 2px rgba(255, 51, 68, 0.4);
+    }
+
+    .okami-panel-body {
+      flex: 1 1 auto;
+      padding: 20px 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .okami-panel-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      margin: auto 0;
+      gap: 12px;
+      padding: 24px 16px;
+      border: 1px dashed rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .okami-panel-placeholder-icon {
+      font-size: 24px;
+      color: #ff3344;
+      opacity: 0.8;
+    }
+
+    .okami-panel-placeholder-text {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #9da1b0;
+    }
+
+    .okami-panel-footer {
+      flex: 0 0 auto;
+      padding: 10px 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 11px;
+      color: #727685;
+      background: rgba(0, 0, 0, 0.18);
+    }
+
     /* Badge sutil de inicialização (desaparece após 3.5s) */
     .okami-init-badge {
       position: absolute;
@@ -1168,6 +1811,20 @@
 
     const triggerZone = createTriggerZoneElement();
     const topBar = createTopBarElement();
+    const leftPanel = createSidePanelElement(
+      OKAMI_HUD_LEFT_PANEL_ID,
+      'left',
+      'Painel Esquerdo',
+      'MÓDULOS',
+      'Alt+Shift+L'
+    );
+    const rightPanel = createSidePanelElement(
+      OKAMI_HUD_RIGHT_PANEL_ID,
+      'right',
+      'Painel Direito',
+      'CONTROLES',
+      'Alt+Shift+R'
+    );
 
     const badge = document.createElement('div');
     badge.id = OKAMI_HUD_INDICATOR_ID;
@@ -1177,12 +1834,16 @@
     shadowRoot.appendChild(style);
     shadowRoot.appendChild(triggerZone);
     shadowRoot.appendChild(topBar);
+    shadowRoot.appendChild(leftPanel);
+    shadowRoot.appendChild(rightPanel);
     shadowRoot.appendChild(badge);
 
     const controller = setupHUDController(
       shadowRoot,
       topBar,
       triggerZone,
+      leftPanel,
+      rightPanel,
       Boolean(options.isImmersive)
     );
 
@@ -1227,6 +1888,8 @@
   globalScope.createExitButtonElement = createExitButtonElement;
   globalScope.createTopBarElement = createTopBarElement;
   globalScope.createAddressBarElement = createAddressBarElement;
+  globalScope.createSidePanelElement = createSidePanelElement;
+  globalScope.createPanelTriggerButton = createPanelTriggerButton;
   globalScope.createTriggerZoneElement = createTriggerZoneElement;
   globalScope.setupHUDController = setupHUDController;
   globalScope.CONTROLLER_REGISTRY_SYMBOL = CONTROLLER_REGISTRY_SYMBOL;
@@ -1239,9 +1902,14 @@
   globalScope.OKAMI_HUD_ADDRESS_INPUT_ID = OKAMI_HUD_ADDRESS_INPUT_ID;
   globalScope.OKAMI_HUD_ADDRESS_CLEAR_ID = OKAMI_HUD_ADDRESS_CLEAR_ID;
   globalScope.OKAMI_HUD_ADDRESS_STATUS_ID = OKAMI_HUD_ADDRESS_STATUS_ID;
+  globalScope.OKAMI_HUD_LEFT_PANEL_ID = OKAMI_HUD_LEFT_PANEL_ID;
+  globalScope.OKAMI_HUD_RIGHT_PANEL_ID = OKAMI_HUD_RIGHT_PANEL_ID;
+  globalScope.OKAMI_HUD_LEFT_PANEL_TRIGGER_ID = OKAMI_HUD_LEFT_PANEL_TRIGGER_ID;
+  globalScope.OKAMI_HUD_RIGHT_PANEL_TRIGGER_ID = OKAMI_HUD_RIGHT_PANEL_TRIGGER_ID;
   globalScope.OKAMI_HUD_EXIT_BUTTON_ID = OKAMI_HUD_EXIT_BUTTON_ID;
   globalScope.OKAMI_HUD_TOAST_ID = OKAMI_HUD_TOAST_ID;
   globalScope.HUD_AUTOHIDE_DELAY_MS = HUD_AUTOHIDE_DELAY_MS;
   globalScope.HUD_INITIAL_REVEAL_DURATION_MS = HUD_INITIAL_REVEAL_DURATION_MS;
+  globalScope.HUD_PANEL_WIDTH_PX = HUD_PANEL_WIDTH_PX;
   globalScope.showToastFeedback = showToastFeedback;
 })(typeof globalThis !== 'undefined' ? globalThis : window);
