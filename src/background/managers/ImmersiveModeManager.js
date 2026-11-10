@@ -558,8 +558,44 @@ export function setupImmersiveModeManager() {
       try {
         const state = await getWindowState(activeInfo.windowId);
         await notifyTab(activeInfo.tabId, Boolean(state.isImmersive));
+        try {
+          if (typeof chrome.tabs.sendMessage === 'function') {
+            const sendRes = chrome.tabs.sendMessage(activeInfo.tabId, {
+              action: MESSAGE_ACTIONS.TAB_NAVIGATED,
+            });
+            if (sendRes && typeof sendRes.catch === 'function') {
+              sendRes.catch(() => {});
+            }
+          }
+        } catch (_ignore) {
+          // Ignora falha de envio para abas restritas
+        }
       } catch (err) {
         logError('Erro ao sincronizar aba ativada:', err);
+      }
+    });
+  }
+
+  // 7. Sincronização quando o endereço da aba é atualizado (navegações tradicionais / redirecionamentos)
+  if (chrome.tabs?.onUpdated) {
+    chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+      try {
+        if (changeInfo?.url || changeInfo?.status === 'complete') {
+          try {
+            if (typeof chrome.tabs.sendMessage === 'function') {
+              const sendRes = chrome.tabs.sendMessage(tabId, {
+                action: MESSAGE_ACTIONS.TAB_NAVIGATED,
+              });
+              if (sendRes && typeof sendRes.catch === 'function') {
+                sendRes.catch(() => {});
+              }
+            }
+          } catch (_ignore) {
+            // Ignora falha de envio para abas restritas
+          }
+        }
+      } catch (err) {
+        logError('Erro ao sincronizar atualização de URL da aba:', err);
       }
     });
   }

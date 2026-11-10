@@ -34,8 +34,15 @@ O Okami HUD combina o modo imersivo com uma barra superior contextual e acionada
   - Recolhimento com atraso inteligente (~380ms) ao afastar o cursor para evitar desaparecimentos acidentais.
 - **Estrutura da Barra Superior**:
   - **Região Esquerda**: Identidade visual Okami (insígnia geométrica `◈ OKAMI HUD`) e espaço reservado para controles futuros.
-  - **Região Central**: Área estrutural reservada (pílula visual) para futuras funcionalidades de navegação.
+  - **Região Central (PR04.4)**: Barra de Endereço e Navegação Funcional interativa dentro de Shadow DOM fechado.
   - **Região Direita**: Controles do escopo atual, integrando o botão de saída do modo imersivo (*✕ Sair*).
+- **Barra de Endereço e Navegação Funcional (PR04.4)**:
+  - **Campo Interativo**: Permite digitação, edição, clique, foco com auto-seleção de texto para substituição rápida e botão de limpeza (`✕`).
+  - **Navegação Direta e Normalização**: URLs diretas (`https://...`) e domínios sem protocolo (`github.com`) são normalizados de forma segura para HTTPS.
+  - **Pesquisa na Web Integrada**: Termos de busca e textos comuns acionam pesquisa na web através do mecanismo padrão configurado (Google).
+  - **Segurança Rigorosa**: Bloqueio de protocolos inseguros (`javascript:`, `data:`, `file:`, `chrome:`, etc.) tanto no Content Script quanto no Background Service Worker.
+  - **Sincronização Bidirecional Contínua**: O endereço acompanha navegações tradicionais, redirecionamentos e mudanças em Single Page Applications (`pushState`, `replaceState`, `popstate`, `hashchange`) sem recriar o HUD.
+  - **Suspensão de Auto-Hide**: A barra superior suspende o cronômetro de recolhimento enquanto o usuário estiver com foco ativo no campo de endereço.
 - **Saídas nativas**: É possível sair a qualquer momento por `F11` ou `Esc` nativos do sistema. O HUD e a barra são recolhidos e desativados imediatamente.
 
 ---
@@ -109,4 +116,10 @@ O projeto segue a convenção clássica e nativa de extensões Manifest V3:
 7. **Saída pelo Botão Visual**: Aproxime o mouse da borda superior para exibir a barra e clique no botão `✕ Sair`. A janela sai imediatamente do modo imersivo, restaurando o tamanho anterior, e a barra é desabilitada.
 8. **Alternância por Atalho**: Pressione `Alt+Shift+F` para reentrar no modo imersivo e pressione novamente para sair. A barra é ativada e desativada em perfeita sincronia com o atalho.
 9. **Sincronização entre Abas**: Com o modo imersivo ativado, alterne entre abas que suportam Content Scripts; a barra superior e o acionador por borda continuam funcionando uniformemente em todas as abas da janela.
-10. **Saída Nativa (`F11`/`Esc`)**: Em modo imersivo, saia pressionando `F11` ou `Esc`. O HUD e o gatilho de borda são imediatamente desabilitados pela sincronização de `onBoundsChanged`.
+10. **Barra de Endereço e Navegação (PR04.4)**:
+    - **Foco e Auto-seleção**: Aproxime o cursor do topo para revelar a barra e clique no campo de endereço. O texto da URL atual é selecionado automaticamente para digitação ágil, e a barra suspende o auto-hide enquanto estiver focada.
+    - **Navegação por Domínio**: Digite `github.com` e pressione `Enter`. O HUD exibe indicador discreto de carregamento (`◌`) e a aba atual navega para `https://github.com/`.
+    - **Pesquisa na Web**: Digite termos textuais (ex: `pesquisa de RPG medieval`) e pressione `Enter`. A aba atual realiza a pesquisa pelo Google.
+    - **Limpeza do Campo**: Digite qualquer valor e clique no botão circular `✕` para limpar o campo imediatamente. Pressione `Esc` para restaurar o endereço original e fechar o foco.
+    - **Sincronização em SPAs**: Ao navegar internamente em sites com histórico client-side (como GitHub, YouTube ou dashboards SPA), observe que o campo de endereço atualiza instantaneamente sem recriar o HUD.
+11. **Saída Nativa (`F11`/`Esc`)**: Em modo imersivo, saia pressionando `F11` ou `Esc`. O HUD e o gatilho de borda são imediatamente desabilitados pela sincronização de `onBoundsChanged`.

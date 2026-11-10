@@ -52,6 +52,7 @@ describe('ImmersiveModeManager', () => {
         query: vi.fn(),
         sendMessage: vi.fn(),
         onActivated: { addListener: vi.fn() },
+        onUpdated: { addListener: vi.fn() },
       },
       action: {
         onClicked: { addListener: vi.fn() },
@@ -369,6 +370,19 @@ describe('ImmersiveModeManager', () => {
       expect(globalThis.chrome.tabs.sendMessage).toHaveBeenCalledWith(202, {
         action: MESSAGE_ACTIONS.IMMERSIVE_STATE_CHANGED,
         isImmersive: true,
+      });
+      expect(globalThis.chrome.tabs.sendMessage).toHaveBeenCalledWith(202, {
+        action: MESSAGE_ACTIONS.TAB_NAVIGATED,
+      });
+    });
+
+    it('deve notificar aba sobre navegação concluída via chrome.tabs.onUpdated', async () => {
+      setupImmersiveModeManager();
+      const updatedListener = globalThis.chrome.tabs.onUpdated.addListener.mock.calls[0][0];
+
+      await updatedListener(303, { status: 'complete', url: 'https://example.com/updated' });
+      expect(globalThis.chrome.tabs.sendMessage).toHaveBeenCalledWith(303, {
+        action: MESSAGE_ACTIONS.TAB_NAVIGATED,
       });
     });
 
