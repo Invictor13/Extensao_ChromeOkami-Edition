@@ -88,7 +88,7 @@ describe('Validação da Arquitetura Nativa e Manifesto (manifest.json)', () => 
     expect(rawManifest).not.toContain('dist/');
   });
 
-  it('deve registrar os comandos de teclado toggle-immersive-mode e toggle-hud-visibility', () => {
+  it('deve registrar os comandos de teclado toggle-immersive-mode, toggle-hud-visibility, toggle-left-panel e toggle-right-panel', () => {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     expect(manifest.commands).toBeDefined();
     expect(manifest.commands['toggle-immersive-mode']).toBeDefined();
@@ -96,5 +96,11 @@ describe('Validação da Arquitetura Nativa e Manifesto (manifest.json)', () => 
 
     expect(manifest.commands['toggle-hud-visibility']).toBeDefined();
     expect(manifest.commands['toggle-hud-visibility'].suggested_key.default).toBe('Alt+Shift+H');
+
+    expect(manifest.commands['toggle-left-panel']).toBeDefined();
+    expect(manifest.commands['toggle-left-panel'].suggested_key.default).toBe('Alt+Shift+L');
+
+    expect(manifest.commands['toggle-right-panel']).toBeDefined();
+    expect(manifest.commands['toggle-right-panel'].suggested_key.default).toBe('Alt+Shift+R');
   });
 });

@@ -26,6 +26,12 @@ O Okami HUD combina o modo imersivo com uma barra superior contextual e acionada
 - **Alternância por atalho de teclado**: Pressione `Alt+Shift+F` para alternar (ativar/desativar).
   - É possível consultar ou personalizar o atalho acessando `chrome://extensions/shortcuts` no Chrome.
 - **Atalho Dedicado do HUD Superior (PR04.1)**: Pressione `Alt+Shift+H` para mostrar ou ocultar a barra superior sob demanda durante o modo imersivo.
+- **Painéis Laterais Integrados e Atalhos (PR05)**:
+  - **Painel Esquerdo (`Alt+Shift+L`)**: Estrutura lateral deslizante voltada para futuros módulos, com botão de fechamento e gatilho visual no HUD.
+  - **Painel Direito (`Alt+Shift+R`)**: Estrutura lateral deslizante voltada para futuros controles, com botão de fechamento e gatilho visual no HUD.
+  - **Fechamento Hierárquico por `Esc`**: O `Esc` fecha de forma previsível e LIFO o painel aberto mais recente, ou fecha o foco do endereço se ativo, sem fechar indevidamente elementos indesejados.
+  - **Preservação de Campos Editáveis**: Atalhos não interferem enquanto o usuário digita em `<input>`, `<textarea>` ou elementos com `contenteditable` da página web.
+  - **Isolamento de Cliques (`pointer-events`)**: Quando os painéis estão fechados, seus containers permanecem totalmente passivos (`pointer-events: none` e `visibility: hidden`), garantindo que nenhuma área invisível intercepte interações na página visitada.
 - **HUD Superior Contextual (PR04 / PR04.1)**:
   - Oculto por padrão durante a navegação normal sem bloquear cliques ou rolagem na página hospedeira (`pointer-events: none`).
   - Ativado automaticamente pela aproximação do cursor à borda superior da tela durante o modo imersivo (`pointermove`/`mousemove` com `clientY <= 8`).

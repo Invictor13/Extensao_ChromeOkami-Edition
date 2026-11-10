@@ -1,6 +1,8 @@
 import {
   COMMAND_TOGGLE_IMMERSIVE,
   COMMAND_TOGGLE_HUD_VISIBILITY,
+  COMMAND_TOGGLE_LEFT_PANEL,
+  COMMAND_TOGGLE_RIGHT_PANEL,
   MESSAGE_ACTIONS,
   READINESS_STATUS,
   STORAGE_KEYS,
@@ -345,6 +347,29 @@ export async function toggleImmersiveMode(windowId) {
 }
 
 /**
+ * Helper para envio resiliente de comandos direcionados à aba ativa.
+ */
+export async function sendCommandToTab(activeTab, action, commandName) {
+  if (!activeTab?.id) return;
+  if (activeTab.url && !isSupportedUrl(activeTab.url)) {
+    return;
+  }
+
+  try {
+    await chrome.tabs.sendMessage(activeTab.id, { action });
+  } catch (_err) {
+    const ready = await ensureContentScript(activeTab.id);
+    if (ready) {
+      try {
+        await chrome.tabs.sendMessage(activeTab.id, { action });
+      } catch (retryErr) {
+        logError(`Erro ao enviar '${commandName}' após recuperação:`, retryErr);
+      }
+    }
+  }
+}
+
+/**
  * Registra todos os listeners e integrações do ImmersiveModeManager.
  */
 export function setupImmersiveModeManager() {
@@ -374,28 +399,17 @@ export function setupImmersiveModeManager() {
         } else if (command === COMMAND_TOGGLE_HUD_VISIBILITY) {
           const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
           if (activeTab?.id) {
-            if (activeTab.url && !isSupportedUrl(activeTab.url)) {
-              // Em páginas restritas, não polui log com falhas esperadas
-              return;
-            }
-
-            try {
-              await chrome.tabs.sendMessage(activeTab.id, {
-                action: MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY,
-              });
-            } catch (_err) {
-              // Recupera content script se ausente e tenta reenviar
-              const ready = await ensureContentScript(activeTab.id);
-              if (ready) {
-                try {
-                  await chrome.tabs.sendMessage(activeTab.id, {
-                    action: MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY,
-                  });
-                } catch (retryErr) {
-                  logError(`Erro ao enviar '${COMMAND_TOGGLE_HUD_VISIBILITY}' após recuperação:`, retryErr);
-                }
-              }
-            }
+            await sendCommandToTab(activeTab, MESSAGE_ACTIONS.TOGGLE_HUD_VISIBILITY, COMMAND_TOGGLE_HUD_VISIBILITY);
+          }
+        } else if (command === COMMAND_TOGGLE_LEFT_PANEL) {
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (activeTab?.id) {
+            await sendCommandToTab(activeTab, MESSAGE_ACTIONS.TOGGLE_LEFT_PANEL, COMMAND_TOGGLE_LEFT_PANEL);
+          }
+        } else if (command === COMMAND_TOGGLE_RIGHT_PANEL) {
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (activeTab?.id) {
+            await sendCommandToTab(activeTab, MESSAGE_ACTIONS.TOGGLE_RIGHT_PANEL, COMMAND_TOGGLE_RIGHT_PANEL);
           }
         }
       } catch (err) {

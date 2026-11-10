@@ -45,6 +45,20 @@
         "mac": "Alt+Shift+H"
       },
       "description": "Mostrar ou ocultar o HUD superior"
+    },
+    "toggle-left-panel": {
+      "suggested_key": {
+        "default": "Alt+Shift+L",
+        "mac": "Alt+Shift+L"
+      },
+      "description": "Abrir ou fechar o painel lateral esquerdo"
+    },
+    "toggle-right-panel": {
+      "suggested_key": {
+        "default": "Alt+Shift+R",
+        "mac": "Alt+Shift+R"
+      },
+      "description": "Abrir ou fechar o painel lateral direito"
     }
   }
 }
