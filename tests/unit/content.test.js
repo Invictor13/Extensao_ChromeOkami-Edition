@@ -176,6 +176,64 @@ describe('Content Script Ingestion', () => {
     const sendResponseSpy = vi.fn();
     capturedListener({ action: MESSAGE_ACTIONS.PING }, {}, sendResponseSpy);
 
-    expect(sendResponseSpy).toHaveBeenCalledWith({ status: 'ok', version: '0.1.0' });
+    expect(sendResponseSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: '0.1.0',
+        status: expect.stringMatching(/initializing|ready/),
+        readiness: expect.objectContaining({
+          listenerRegistered: true,
+        }),
+      })
+    );
+  });
+
+  it('deve responder com status ready e controllerAvailable após injectOkamiHUD ser concluído', () => {
+    let capturedListener = null;
+    globalThis.chrome = {
+      runtime: {
+        onMessage: {
+          addListener: vi.fn((cb) => {
+            capturedListener = cb;
+          }),
+        },
+      },
+    };
+
+    globalThis.setupMessageListeners();
+    globalThis.injectOkamiHUD();
+
+    const sendResponseSpy = vi.fn();
+    capturedListener({ action: MESSAGE_ACTIONS.PING }, {}, sendResponseSpy);
+
+    expect(sendResponseSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'ready',
+        version: '0.1.0',
+        readiness: expect.objectContaining({
+          listenerRegistered: true,
+          hudElementInjected: true,
+          controllerAvailable: true,
+        }),
+      })
+    );
+  });
+
+  it('deve reutilizar o controlador da instância existente em caso de reinjeção', () => {
+    const firstInstance = globalThis.injectOkamiHUD();
+    const initialController = globalThis.getCurrentHUDController();
+    expect(initialController).not.toBeNull();
+
+    // Simula reinjeção
+    const secondInstance = globalThis.injectOkamiHUD();
+    expect(secondInstance).toBe(firstInstance);
+
+    const controllerAfterReinject = globalThis.getCurrentHUDController();
+    expect(controllerAfterReinject).toBe(initialController);
+
+    // Alterna a visibilidade através de toggleHUDVisibility
+    expect(controllerAfterReinject.isTopBarVisible()).toBe(false);
+    globalThis.applyImmersiveState(true);
+    globalThis.toggleHUDVisibility();
+    expect(controllerAfterReinject.isTopBarVisible()).toBe(true);
   });
 });

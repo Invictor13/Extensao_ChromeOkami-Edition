@@ -2,6 +2,7 @@ import {
   COMMAND_TOGGLE_IMMERSIVE,
   COMMAND_TOGGLE_HUD_VISIBILITY,
   MESSAGE_ACTIONS,
+  READINESS_STATUS,
   STORAGE_KEYS,
 } from '../../shared/constants/index.js';
 import { logInfo, logError } from '../../shared/utils/logger.js';
@@ -98,7 +99,15 @@ export async function pingContentScript(tabId) {
   try {
     if (typeof chrome === 'undefined' || !chrome.tabs?.sendMessage) return false;
     const response = await chrome.tabs.sendMessage(tabId, { action: MESSAGE_ACTIONS.PING });
-    return Boolean(response && response.status === 'ok');
+    // Aceita tanto status 'ready' com controllerAvailable quanto retrocompatibilidade com 'ok'
+    if (!response) return false;
+    if (response.status === READINESS_STATUS.READY || response.readiness?.controllerAvailable) {
+      return true;
+    }
+    if (response.status === 'ok' && (!response.readiness || response.readiness.controllerAvailable !== false)) {
+      return true;
+    }
+    return false;
   } catch (_err) {
     return false;
   }
@@ -135,11 +144,14 @@ export async function ensureContentScript(tabId) {
           ],
         });
 
-        // Aguarda breve confirmação de inicialização
-        const confirmed = await pingContentScript(tabId);
-        if (confirmed) {
-          logInfo(`Content Script recuperado com sucesso na aba ${tabId} (${tab.url})`);
-          return true;
+        // Aguarda breve confirmação de inicialização com retentativas limitadas
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const confirmed = await pingContentScript(tabId);
+          if (confirmed) {
+            logInfo(`Content Script recuperado com sucesso na aba ${tabId} (${tab.url})`);
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 60));
         }
       } catch (injectionError) {
         // Registra se for um erro inesperado de permissão ou execução

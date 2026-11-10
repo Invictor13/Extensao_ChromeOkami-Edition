@@ -14,6 +14,10 @@
   const HUD_AUTOHIDE_DELAY_MS = 380;
   const HUD_INITIAL_REVEAL_DURATION_MS = 1800;
 
+  // Chave de registro privado compartilhada no mundo isolado do content script
+  const CONTROLLER_REGISTRY_SYMBOL = Symbol.for('okami.hud.controller');
+  const SHADOW_ROOT_REGISTRY_SYMBOL = Symbol.for('okami.hud.shadowRoot');
+
   class OkamiHUDRoot extends HTMLElement {
     constructor() {
       super();
@@ -21,17 +25,31 @@
       this._shadowRoot = this.attachShadow({ mode: 'closed' });
       this._isImmersive = false;
       this._hudController = null;
+
+      // Armazena no registro privado do elemento
+      this[SHADOW_ROOT_REGISTRY_SYMBOL] = this._shadowRoot;
     }
 
     connectedCallback() {
       this.render();
     }
 
+    disconnectedCallback() {
+      if (this._hudController && typeof this._hudController.destroy === 'function') {
+        this._hudController.destroy();
+      }
+    }
+
     render() {
+      if (this._hudController && typeof this._hudController.destroy === 'function') {
+        this._hudController.destroy();
+      }
       this._hudController = renderOkamiHUDInShadow(this._shadowRoot, {
         isImmersive: this._isImmersive,
       });
+      this[CONTROLLER_REGISTRY_SYMBOL] = this._hudController;
     }
+
     setImmersiveState(isImmersive, options = {}) {
       this._isImmersive = Boolean(isImmersive);
       const shouldFlash = typeof options === 'boolean' ? options : (options?.flash ?? false);
@@ -878,6 +896,8 @@
   globalScope.createTopBarElement = createTopBarElement;
   globalScope.createTriggerZoneElement = createTriggerZoneElement;
   globalScope.setupHUDController = setupHUDController;
+  globalScope.CONTROLLER_REGISTRY_SYMBOL = CONTROLLER_REGISTRY_SYMBOL;
+  globalScope.SHADOW_ROOT_REGISTRY_SYMBOL = SHADOW_ROOT_REGISTRY_SYMBOL;
   globalScope.OKAMI_HUD_CUSTOM_ELEMENT = OKAMI_HUD_CUSTOM_ELEMENT;
   globalScope.OKAMI_HUD_INDICATOR_ID = OKAMI_HUD_INDICATOR_ID;
   globalScope.OKAMI_HUD_TOP_BAR_ID = OKAMI_HUD_TOP_BAR_ID;
