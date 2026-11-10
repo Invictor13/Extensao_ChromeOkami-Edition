@@ -4,7 +4,9 @@ import {
   MESSAGE_ACTIONS,
   READINESS_STATUS,
   STORAGE_KEYS,
+  DEFAULT_SEARCH_ENGINE_URL,
 } from '../../shared/constants/index.js';
+import { resolveNavigationTarget } from '../../shared/utils/navigation.js';
 import { logInfo, logError } from '../../shared/utils/logger.js';
 
 /**
@@ -431,6 +433,79 @@ export function setupImmersiveModeManager() {
             const winId = windowId || (await chrome.windows.getCurrent())?.id;
             const state = await getWindowState(winId);
             sendResponse({ isImmersive: Boolean(state.isImmersive) });
+          })();
+          return true;
+        }
+
+        // Navegação funcional na aba atual requisitada pelo Okami HUD
+        if (message?.action === MESSAGE_ACTIONS.NAVIGATE_TAB) {
+          (async () => {
+            try {
+              const tabId = sender.tab?.id;
+              if (!tabId) {
+                sendResponse({
+                  success: false,
+                  error: 'Aba de origem não identificada.',
+                });
+                return;
+              }
+
+              // Valida se a aba atual está em uma URL HTTP/HTTPS suportada
+              if (sender.tab?.url && !isSupportedUrl(sender.tab.url)) {
+                sendResponse({
+                  success: false,
+                  error: 'Navegação não permitida a partir desta página.',
+                });
+                return;
+              }
+
+              const rawQuery = message.query;
+              const result = resolveNavigationTarget(rawQuery, DEFAULT_SEARCH_ENGINE_URL);
+
+              if (result.type === 'empty') {
+                sendResponse({
+                  success: false,
+                  error: 'Entrada vazia.',
+                  target: null,
+                });
+                return;
+              }
+
+              if (result.type === 'blocked' || !result.destinationUrl) {
+                sendResponse({
+                  success: false,
+                  error: result.error || 'Protocolo ou endereço bloqueado por segurança.',
+                  target: null,
+                });
+                return;
+              }
+
+              // Validação adicional de protocolo de destino: apenas http e https
+              const dest = result.destinationUrl.toLowerCase();
+              if (!dest.startsWith('http://') && !dest.startsWith('https://')) {
+                sendResponse({
+                  success: false,
+                  error: 'Apenas protocolos HTTP e HTTPS são autorizados.',
+                  target: null,
+                });
+                return;
+              }
+
+              logInfo(`Navegando aba ${tabId} para: ${result.destinationUrl}`);
+              await chrome.tabs.update(tabId, { url: result.destinationUrl });
+
+              sendResponse({
+                success: true,
+                destinationUrl: result.destinationUrl,
+                type: result.type,
+              });
+            } catch (navErr) {
+              logError('Falha ao executar navegação na aba:', navErr);
+              sendResponse({
+                success: false,
+                error: navErr.message || 'Falha ao atualizar aba.',
+              });
+            }
           })();
           return true;
         }
