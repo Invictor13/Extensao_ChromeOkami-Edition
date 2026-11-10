@@ -29,3 +29,9 @@ export const MESSAGE_ACTIONS = {
   TOGGLE_HUD_VISIBILITY: 'OKAMI_TOGGLE_HUD_VISIBILITY',
   PING: 'OKAMI_PING',
 };
+
+export const READINESS_STATUS = {
+  INITIALIZING: 'initializing',
+  READY: 'ready',
+  ERROR: 'error',
+};
